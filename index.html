@@ -342,6 +342,23 @@ textarea.input{resize:vertical;min-height:78px}
 .divider{height:1px;background:var(--line);margin:14px 0}
 .avatar-sm{width:28px;height:28px;border-radius:50%;background:var(--green-100);color:var(--green-800);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex:none}
 .center-pad{padding:40px 20px;text-align:center}
+
+/* ---------- Print (reports) ---------- */
+.print-header{display:none}
+@media print{
+  .topbar,.bottomnav,.rail,.no-print,.fab{display:none!important}
+  body{background:#fff}
+  .rail-content{padding:0!important}
+  .print-header{
+    display:flex!important;align-items:center;gap:12px;margin-bottom:16px;
+    padding-bottom:12px;border-bottom:2px solid var(--green-800);
+  }
+  .print-header img{width:46px;height:46px;border-radius:50%}
+  .print-header h2{font-size:16px;color:var(--green-900)}
+  .print-header p{font-size:11px;color:var(--ink-500);margin-top:2px}
+  .section{break-inside:avoid;box-shadow:none;border:1px solid var(--line-strong)}
+  .list-item{break-inside:avoid}
+}
 </style>
 </head>
 <body>
@@ -586,7 +603,11 @@ function topbarHtml(){
             <div style="font-weight:800;font-size:13.5px">${esc(u.name)}</div>
             <div class="muted" style="margin-top:2px">${esc(u.employeeNumber)} · ${u.role==='lead'?'مشرف':'عضو الفريق'}</div>
           </div>
-          ${u.role==='lead'?`<button data-go="portal-employees">${icon('users')} إدارة الموظفين</button>`:''}
+          ${u.role==='lead'?`
+          <button data-go="portal-employees">${icon('users')} إدارة الموظفين</button>
+          <button data-go="portal-reports">${icon('gauge')} التقارير والأداء</button>
+          <button id="backupBtn">${icon('doc')} نسخة احتياطية</button>
+          `:''}
           <button data-go="portal-account">${icon('key')} تغيير كلمة المرور</button>
           <div class="menu-divider"></div>
           <button class="danger" id="logoutBtn">${icon('logout')} تسجيل الخروج</button>
@@ -610,7 +631,10 @@ function railHtml(){
         ${icon(it.icon)}<span>${it.label}</span>
       </button>`).join('')}
     <div class="divider"></div>
-    ${S.user&&S.user.role==='lead'?`<button class="navitem ${S.route==='portal-employees'?'active':''}" data-go="portal-employees">${icon('users')}<span>الموظفون</span></button>`:''}
+    ${S.user&&S.user.role==='lead'?`
+      <button class="navitem ${S.route==='portal-employees'?'active':''}" data-go="portal-employees">${icon('users')}<span>الموظفون</span></button>
+      <button class="navitem ${S.route==='portal-reports'?'active':''}" data-go="portal-reports">${icon('gauge')}<span>التقارير</span></button>
+    `:''}
   </div>`;
 }
 function portalShell(innerHtml){
@@ -647,6 +671,7 @@ function render(){
   else if(S.route==='portal-meeting-add') inner=renderMeetingAdd();
   else if(S.route==='portal-meeting-detail') inner=renderMeetingDetail(S.routeParam);
   else if(S.route==='portal-employees') inner=renderEmployees();
+  else if(S.route==='portal-reports') inner=renderReports();
   else if(S.route==='portal-account') inner=renderAccount();
   else inner=renderDashboard();
 
@@ -663,6 +688,8 @@ function wireShellEvents(){
   },{once:true});
   const lo=$('#logoutBtn');
   if(lo) lo.addEventListener('click',async()=>{ await signOut(auth); toast('تم تسجيل الخروج'); });
+  const bk=$('#backupBtn');
+  if(bk) bk.addEventListener('click',runBackupExport);
 }
 function wirePortalRoute(){
   if(S.route==='portal-requests') wireRequestsList();
@@ -673,6 +700,7 @@ function wirePortalRoute(){
   else if(S.route==='portal-meeting-add') wireMeetingAdd();
   else if(S.route==='portal-meeting-detail') wireMeetingDetail(S.routeParam);
   else if(S.route==='portal-employees') wireEmployees();
+  else if(S.route==='portal-reports') wireReports();
   else if(S.route==='portal-account') wireAccount();
   else if(S.route==='portal-dashboard') wireDashboard();
 }
@@ -1271,6 +1299,31 @@ function renderRequestDetail(id){
   </div>
 
   <div class="section">
+    <div class="section-head">${icon('doc')} المرفقات والملفات</div>
+    <div class="section-body">
+      <p class="muted" style="margin-bottom:10px">أضيفي رابط الملف من الملف المشترك أو قوقل درايف مع وصف مختصر</p>
+      <div id="attachList">
+        ${(r.attachments&&r.attachments.length)?r.attachments.map((a,i)=>`
+          <div class="list-item" style="padding:10px 0;border-bottom:1px solid var(--line)">
+            <div class="list-item-icon">${icon('doc')}</div>
+            <div class="list-item-body">
+              <a href="${esc(a.url)}" target="_blank" rel="noopener" class="list-item-title" style="color:var(--green-700);text-decoration:underline">${esc(a.label||a.url)}</a>
+              <div class="list-item-sub">${a.addedBy?esc(a.addedBy):''}</div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" data-remove-attach="${i}">${icon('x')}</button>
+          </div>`).join(''):'<p class="muted">لا توجد مرفقات بعد</p>'}
+      </div>
+      <form id="attachForm" style="margin-top:12px">
+        <div class="row2">
+          <div class="field" style="margin-bottom:0"><label>وصف المرفق</label><input class="input" name="label" placeholder="مثال: نموذج موافقة موقّع" required></div>
+          <div class="field" style="margin-bottom:0"><label>الرابط</label><input class="input" name="url" type="url" placeholder="https://..." required></div>
+        </div>
+        <button class="btn btn-outline" type="submit" style="margin-top:10px">${icon('plus')} إضافة مرفق</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="section">
     <div class="section-head">${icon('award')} اعتماد رئيس فريق التصوير</div>
     <div class="section-body">
       ${(r.internal&&r.internal.leadApprovalName)?`
@@ -1307,6 +1360,29 @@ function wireRequestDetail(id){
   });
   const srtBtn=$('#setReceivedTodayBtn');
   if(srtBtn) srtBtn.addEventListener('click',()=>{ $('#internalForm [name=receivedDate]').value=todayISO(); });
+
+  $all('[data-remove-attach]').forEach(b=>b.addEventListener('click',async()=>{
+    const idx=parseInt(b.dataset.removeAttach,10);
+    const next=(r.attachments||[]).filter((_,i)=>i!==idx);
+    try{ await updateDoc(doc(db,'requests',id),{attachments:next, updatedAt:serverTimestamp()}); }
+    catch(err){ console.error(err); toast('تعذر حذف المرفق',true); }
+  }));
+  const attForm=$('#attachForm');
+  if(attForm) attForm.addEventListener('submit',async(e)=>{
+    e.preventDefault();
+    const btn=e.target.querySelector('[type=submit]');
+    const fd=new FormData(attForm);
+    const next=[...(r.attachments||[]), {label:fd.get('label')||'', url:fd.get('url')||'', addedBy:S.user.name, addedAt:todayISO()}];
+    setLoading(btn,true);
+    try{
+      await updateDoc(doc(db,'requests',id),{attachments:next, updatedAt:serverTimestamp()});
+      toast('تمت إضافة المرفق');
+    }catch(err){
+      console.error(err);
+      toast('تعذر إضافة المرفق',true);
+    }
+    setLoading(btn,false,'<span>'+icon('plus')+' إضافة مرفق</span>');
+  });
 
   const iform=$('#internalForm');
   if(iform) iform.addEventListener('submit',async(e)=>{
@@ -1650,6 +1726,7 @@ function renderEmployees(){
           </div>
         </div>
         <button class="btn btn-ghost btn-sm" data-toggle-emp="${e.id}">${e.active===false?'تفعيل':'تعطيل'}</button>
+        ${e.id!==S.user.id?`<button class="btn btn-danger btn-sm" data-delete-emp="${e.id}" style="margin-right:6px">${icon('trash')}</button>`:''}
       </div>`).join('')}
   </div>
   <div id="addEmpModalWrap"></div>
@@ -1698,6 +1775,15 @@ function wireEmployees(){
       toast(emp.active===false?'تم تفعيل الحساب':'تم تعطيل الحساب');
     }catch(err){ console.error(err); toast('تعذر تنفيذ العملية',true); }
   }));
+  $all('[data-delete-emp]').forEach(b=>b.addEventListener('click',async()=>{
+    const emp=S.employees.find(x=>x.id===b.dataset.deleteEmp);
+    if(!emp) return;
+    if(!confirm(`حذف "${emp.name}" نهائياً من النظام؟ لن يتمكن من تسجيل الدخول بعدها`)) return;
+    try{
+      await deleteDoc(doc(db,'employees',emp.id));
+      toast('تم حذف الموظف');
+    }catch(err){ console.error(err); toast('تعذر حذف الموظف',true); }
+  }));
 }
 const DEFAULT_EMP_PASSWORD='123456';
 function wireAddEmpModal(){
@@ -1744,6 +1830,176 @@ function wireAddEmpModal(){
       if(secondaryApp){ try{await deleteApp(secondaryApp);}catch(e2){} }
     }
   });
+}
+
+/* ============================================================
+   التقارير والأداء (مشرف فقط) + نسخة احتياطية
+   ============================================================ */
+function currentQuarter(){ return Math.floor(new Date().getMonth()/3)+1; }
+function yearOptions(){
+  const cy=new Date().getFullYear(); const arr=[];
+  for(let y=cy-2;y<=cy+1;y++) arr.push(y);
+  return arr;
+}
+function reportPeriodBounds(type,value){
+  if(type==='month'){
+    const [y,m]=value.split('-').map(Number);
+    const start=`${y}-${String(m).padStart(2,'0')}-01`;
+    const lastDay=new Date(y,m,0).getDate();
+    const end=`${y}-${String(m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+    return {start,end,label:monthLabel(value)};
+  }
+  if(type==='quarter'){
+    const [y,q]=value.split('-Q').map(Number);
+    const startMonth=(q-1)*3+1, endMonth=startMonth+2;
+    const start=`${y}-${String(startMonth).padStart(2,'0')}-01`;
+    const lastDay=new Date(y,endMonth,0).getDate();
+    const end=`${y}-${String(endMonth).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+    return {start,end,label:`الربع ${q} - ${y}`};
+  }
+  const y=parseInt(value,10);
+  return {start:`${y}-01-01`,end:`${y}-12-31`,label:`سنة ${y}`};
+}
+function computeReportStats(start,end){
+  const reqInPeriod=S.requests.filter(r=>r.event&&r.event.date&&r.event.date>=start&&r.event.date<=end);
+  const visitsInPeriod=S.visits.filter(v=>v.date&&v.date>=start&&v.date<=end);
+  const meetingsInPeriod=S.meetings.filter(m=>m.date&&m.date>=start&&m.date<=end);
+  const reqByStatus={submitted:0,received:0,assigned:0,completed:0};
+  const reqByPriority={urgent:0,medium:0,prescheduled:0};
+  reqInPeriod.forEach(r=>{
+    if(reqByStatus[r.status]!==undefined) reqByStatus[r.status]++;
+    if(reqByPriority[r.priority]!==undefined) reqByPriority[r.priority]++;
+  });
+  let totalSiteVisits=0; const byTaskType={};
+  visitsInPeriod.forEach(v=>(v.sites||[]).forEach(s=>{
+    totalSiteVisits++;
+    byTaskType[s.taskType]=(byTaskType[s.taskType]||0)+1;
+  }));
+  const perEmp=S.employees.map(e=>{
+    const asPhotog=reqInPeriod.filter(r=>r.internal&&r.internal.assignedPhotographers&&r.internal.assignedPhotographers.includes(e.id)).length;
+    const asEditor=reqInPeriod.filter(r=>r.internal&&r.internal.assignedEditors&&r.internal.assignedEditors.includes(e.id)).length;
+    const visitsLogged=visitsInPeriod.filter(v=>v.createdBy===e.name).length;
+    const meetingsAttended=meetingsInPeriod.filter(m=>m.attendees&&m.attendees.includes(e.id)).length;
+    return {emp:e,asPhotog,asEditor,visitsLogged,meetingsAttended,total:asPhotog+asEditor+visitsLogged+meetingsAttended};
+  }).sort((a,b)=>b.total-a.total);
+  return {reqTotal:reqInPeriod.length,reqByStatus,reqByPriority,visitDays:visitsInPeriod.length,totalSiteVisits,byTaskType,meetingsTotal:meetingsInPeriod.length,perEmp};
+}
+function periodPickerHtml(){
+  const type=S.filters.reportType;
+  if(type==='month'){
+    return `<div class="field" style="margin-bottom:0"><label>الشهر</label><input class="input" type="month" id="reportMonthInput" value="${esc(S.filters.reportValue)}"></div>`;
+  }
+  if(type==='quarter'){
+    const parts=(S.filters.reportValue||'').split('-Q');
+    const y=parts[0], q=parts[1];
+    return `
+    <div class="row2">
+      <div class="field" style="margin-bottom:0"><label>السنة</label>
+        <select class="input" id="reportYearSelect">${yearOptions().map(yy=>`<option value="${yy}" ${String(yy)===y?'selected':''}>${yy}</option>`).join('')}</select>
+      </div>
+      <div class="field" style="margin-bottom:0"><label>الربع</label>
+        <select class="input" id="reportQuarterSelect">${[1,2,3,4].map(qq=>`<option value="${qq}" ${String(qq)===q?'selected':''}>الربع ${qq}</option>`).join('')}</select>
+      </div>
+    </div>`;
+  }
+  return `<div class="field" style="margin-bottom:0"><label>السنة</label>
+    <select class="input" id="reportYearOnlySelect">${yearOptions().map(yy=>`<option value="${yy}" ${String(yy)===S.filters.reportValue?'selected':''}>${yy}</option>`).join('')}</select>
+  </div>`;
+}
+function reportBodyHtml(){
+  const type=S.filters.reportType;
+  const period=reportPeriodBounds(type,S.filters.reportValue);
+  const stats=computeReportStats(period.start,period.end);
+  const taskTypeEntries=Object.entries(stats.byTaskType).sort((a,b)=>b[1]-a[1]);
+  return `
+  <div class="print-header">
+    <img src="data:image/png;base64,${LOGO_B64}" alt="">
+    <div>
+      <h2>تقرير فريق التصوير — ${esc(period.label)}</h2>
+      <p>دائرة الفعاليات والتوعية - بلدية مسقط</p>
+    </div>
+  </div>
+  <div class="stat-grid" style="margin-bottom:16px">
+    <div class="stat-card"><span class="num">${stats.reqTotal}</span><span class="lbl">طلبات التصوير</span></div>
+    <div class="stat-card gold"><span class="num">${stats.visitDays}</span><span class="lbl">أيام زيارات (${stats.totalSiteVisits} موقع)</span></div>
+    <div class="stat-card" style="border-color:var(--blue-600)"><span class="num">${stats.meetingsTotal}</span><span class="lbl">اجتماعات</span></div>
+    <div class="stat-card urgent"><span class="num">${stats.reqByPriority.urgent}</span><span class="lbl">طلبات عاجلة</span></div>
+  </div>
+  <div class="section" style="margin-bottom:14px">
+    <div class="section-head">${icon('doc')} الطلبات حسب الحالة</div>
+    <div class="section-body">
+      ${['submitted','received','assigned','completed'].map(s=>`<div class="kv"><span class="k">${statusLabel(s)}</span><span class="v">${stats.reqByStatus[s]}</span></div>`).join('')}
+    </div>
+  </div>
+  <div class="section" style="margin-bottom:14px">
+    <div class="section-head">${icon('pin')} الزيارات حسب نوع المهمة</div>
+    <div class="section-body">
+      ${taskTypeEntries.length?taskTypeEntries.map(([t,c])=>`<div class="kv"><span class="k">${esc(t)}</span><span class="v">${c}</span></div>`).join(''):'<p class="muted">لا توجد زيارات في هذه الفترة</p>'}
+    </div>
+  </div>
+  <div class="section" style="margin-bottom:20px">
+    <div class="section-head">${icon('award')} أداء الموظفين وإنجازاتهم</div>
+    <div class="section-body" style="padding:0">
+      ${stats.perEmp.map(row=>`
+        <div class="list-item" style="cursor:default">
+          <div class="avatar-sm" style="width:36px;height:36px">${esc(initials(row.emp.name))}</div>
+          <div class="list-item-body">
+            <div class="list-item-title">${esc(row.emp.name)}</div>
+            <div class="list-item-sub">${row.asPhotog} تصوير · ${row.asEditor} مونتاج · ${row.visitsLogged} زيارة · ${row.meetingsAttended} اجتماع</div>
+          </div>
+          <div style="font-weight:800;color:var(--green-700);font-size:15px">${row.total}</div>
+        </div>`).join('')||'<p class="muted" style="padding:16px">لا يوجد موظفون</p>'}
+    </div>
+  </div>`;
+}
+function renderReports(){
+  if(S.user.role!=='lead') return `<div class="empty-state">${icon('alert')}<h3>هذه الصفحة مخصصة للمشرف فقط</h3></div>`;
+  if(!S.filters.reportType) S.filters.reportType='month';
+  if(!S.filters.reportValue) S.filters.reportValue=todayISO().slice(0,7);
+  return `
+  <div class="section-title-row no-print"><h2>التقارير والأداء</h2>
+    <button class="btn btn-outline btn-sm" id="printReportBtn">${icon('doc')} طباعة / حفظ PDF</button>
+  </div>
+  <div class="chiprow no-print">
+    <button class="chip ${S.filters.reportType==='month'?'on':''}" data-rtype="month">شهري</button>
+    <button class="chip ${S.filters.reportType==='quarter'?'on':''}" data-rtype="quarter">ربع سنوي</button>
+    <button class="chip ${S.filters.reportType==='year'?'on':''}" data-rtype="year">سنوي</button>
+  </div>
+  <div class="section no-print" style="margin-bottom:14px"><div class="section-body">${periodPickerHtml()}</div></div>
+  <div id="reportBody">${reportBodyHtml()}</div>
+  `;
+}
+function refreshReportBody(){ const w=$('#reportBody'); if(w) w.innerHTML=reportBodyHtml(); }
+function wireReports(){
+  if(S.user.role!=='lead') return;
+  $all('[data-rtype]').forEach(b=>b.addEventListener('click',()=>{
+    S.filters.reportType=b.dataset.rtype;
+    if(b.dataset.rtype==='quarter') S.filters.reportValue=`${new Date().getFullYear()}-Q${currentQuarter()}`;
+    else if(b.dataset.rtype==='year') S.filters.reportValue=String(new Date().getFullYear());
+    else S.filters.reportValue=todayISO().slice(0,7);
+    render();
+  }));
+  const mi=$('#reportMonthInput');
+  if(mi) mi.addEventListener('change',()=>{ S.filters.reportValue=mi.value; refreshReportBody(); });
+  const ys=$('#reportYearSelect'), qs=$('#reportQuarterSelect');
+  if(ys&&qs){ const upd=()=>{ S.filters.reportValue=`${ys.value}-Q${qs.value}`; refreshReportBody(); }; ys.addEventListener('change',upd); qs.addEventListener('change',upd); }
+  const yos=$('#reportYearOnlySelect');
+  if(yos) yos.addEventListener('change',()=>{ S.filters.reportValue=yos.value; refreshReportBody(); });
+  const pb=$('#printReportBtn');
+  if(pb) pb.addEventListener('click',()=>window.print());
+}
+function runBackupExport(){
+  const data={
+    exportedAt:new Date().toISOString(), project:'فريق التصوير - بلدية مسقط',
+    employees:S.employees, requests:S.requests, visits:S.visits, meetings:S.meetings
+  };
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=`نسخة-احتياطية-فريق-التصوير-${todayISO()}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast('تم تنزيل النسخة الاحتياطية');
 }
 
 /* ============================================================
