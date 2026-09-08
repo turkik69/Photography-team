@@ -497,6 +497,20 @@ function setLoading(btn,loading,label){
   if(loading){btn.dataset.label=btn.innerHTML;btn.innerHTML='<span class="spinner" style="width:16px;height:16px;border-width:2px;margin:0"></span>';btn.disabled=true;}
   else{btn.innerHTML=btn.dataset.label||label||btn.innerHTML;btn.disabled=false;}
 }
+function authErrorMessage(err){
+  const code=err&&err.code||'';
+  const known={
+    'auth/user-not-found':'لا يوجد حساب بهذا الرقم الوظيفي',
+    'auth/wrong-password':'الرقم السري غير صحيح',
+    'auth/invalid-credential':'الرقم الوظيفي أو الرقم السري غير صحيح',
+    'auth/invalid-email':'صيغة الرقم الوظيفي غير صالحة',
+    'auth/user-disabled':'هذا الحساب معطّل من إعدادات Firebase',
+    'auth/too-many-requests':'محاولات كثيرة متتالية، الرجاء الانتظار قليلاً ثم إعادة المحاولة',
+    'auth/network-request-failed':'تعذر الاتصال بالخادم — تحققي من الشبكة أو برنامج الحماية (مثل Kaspersky)',
+  };
+  const base=known[code]||'تعذر تسجيل الدخول';
+  return code?`${base} (${code})`:base;
+}
 
 /* التوجيه Router */
 function go(route,param){
@@ -783,8 +797,9 @@ function renderLandingBody(loginErr){
         await signInWithEmailAndPassword(auth, empNo+AUTH_DOMAIN_SUFFIX, pass);
         toast('تم تسجيل الدخول بنجاح');
       }catch(err){
+        console.error('login error:', err.code, err.message);
         setLoading(btn,false,'<span>'+icon('key')+' تسجيل الدخول</span>');
-        renderLandingBody('الرقم الوظيفي أو الرقم السري غير صحيح');
+        renderLandingBody(authErrorMessage(err));
       }
     });
   }
