@@ -16,28 +16,28 @@
    نظام التصميم - Design Tokens
    ============================================================ */
 :root{
-  --green-950:#0A2F24;
-  --green-900:#0B3B2E;
-  --green-800:#0F4C3A;
-  --green-700:#146B4F;
-  --green-600:#1C8A63;
-  --green-500:#25A578;
-  --green-100:#E4F1EA;
-  --green-50:#F2F8F5;
+  --green-950:#122E24;
+  --green-900:#1A3B2C;
+  --green-800:#224937;
+  --green-700:#2D5B46;
+  --green-600:#3D7159;
+  --green-500:#4E8770;
+  --green-100:#E2ECE5;
+  --green-50:#F1F6F2;
   --gold-700:#96721E;
   --gold-600:#B8862E;
   --gold-500:#CB9C3C;
   --gold-100:#F6ECD6;
   --gold-50:#FBF6EA;
-  --ink-900:#151E1A;
-  --ink-700:#33403A;
-  --ink-500:#5B6B63;
-  --ink-300:#8FA098;
-  --line:#E1E7E3;
-  --line-strong:#C7D1CB;
+  --ink-900:#171F1B;
+  --ink-700:#38423C;
+  --ink-500:#616E67;
+  --ink-300:#93A199;
+  --line:#E4E1D4;
+  --line-strong:#CFCBB8;
   --paper:#FFFFFF;
-  --paper-50:#F7F8F6;
-  --paper-100:#EFF2EF;
+  --paper-50:#FAF7EE;
+  --paper-100:#F2EDDD;
   --red-700:#9A2E22;
   --red-600:#C0392B;
   --red-100:#FBE7E4;
@@ -159,6 +159,10 @@ img{max-width:100%;display:block}
 .btn-ghost:hover{background:var(--paper-100)}
 .btn-danger{background:#fff;color:var(--red-600);border:1.5px solid var(--red-100)}
 .btn-danger:hover{background:var(--red-100)}
+.btn-blue{background:var(--blue-100);color:var(--blue-600)}
+.btn-blue:hover{background:#D6E5F3}
+.btn-tan{background:var(--gold-100);color:var(--gold-700)}
+.btn-tan:hover{background:#F0E2C4}
 .btn-block{width:100%}
 .btn-sm{padding:8px 12px;font-size:13px;border-radius:7px}
 .btn:disabled{opacity:.5;cursor:not-allowed}
@@ -514,7 +518,7 @@ function authErrorMessage(err){
     'auth/invalid-email':'صيغة الرقم الوظيفي غير صالحة',
     'auth/user-disabled':'هذا الحساب معطّل من إعدادات Firebase',
     'auth/too-many-requests':'محاولات كثيرة متتالية، الرجاء الانتظار قليلاً ثم إعادة المحاولة',
-    'auth/network-request-failed':'تعذر الاتصال بالخادم — تحققي من الشبكة أو برنامج الحماية (مثل Kaspersky)',
+    'auth/network-request-failed':'تعذر الاتصال بالخادم — الرجاء التحقق من الشبكة أو برنامج الحماية (مثل Kaspersky)',
   };
   const base=known[code]||'تعذر تسجيل الدخول';
   return code?`${base} (${code})`:base;
@@ -582,7 +586,7 @@ onAuthStateChanged(auth, async (fbUser)=>{
         S.ready=true; go('login'); return;
       } else {
         /* حساب مصادقة بلا ملف موظف مرتبط - حالة استثنائية */
-        console.error('لا يوجد مستند Firestore يطابق UID:', fbUser.uid, '— تأكدي إن معرّف المستند بمجموعة employees مطابق تماماً لهذا الـ UID');
+        console.error('لا يوجد مستند Firestore يطابق UID:', fbUser.uid, '— يجب أن يطابق معرّف المستند بمجموعة employees هذا الـ UID تماماً');
         S.user=null;
         await signOut(auth);
         S.pendingLoginError='لا يوجد ملف موظف مرتبط بهذا الحساب، الرجاء التواصل مع المشرف';
@@ -646,6 +650,7 @@ function topbarHtml(){
           <button data-go="portal-reports">${icon('gauge')} التقارير والأداء</button>
           <button id="backupBtn">${icon('doc')} نسخة احتياطية</button>
           <button id="importBtn">${icon('tasks')} استيراد السجلات القديمة</button>
+          <button data-go="portal-trash">${icon('trash')} سلة المحذوفات</button>
           `:''}
           <button data-go="portal-account">${icon('key')} تغيير كلمة المرور</button>
           <div class="menu-divider"></div>
@@ -714,6 +719,7 @@ function render(){
   else if(S.route==='portal-meeting-detail') inner=renderMeetingDetail(S.routeParam);
   else if(S.route==='portal-employees') inner=renderEmployees();
   else if(S.route==='portal-reports') inner=renderReports();
+  else if(S.route==='portal-trash') inner=renderTrash();
   else if(S.route==='portal-account') inner=renderAccount();
   else inner=renderDashboard();
 
@@ -748,6 +754,7 @@ function wirePortalRoute(){
   else if(S.route==='portal-meeting-detail') wireMeetingDetail(S.routeParam);
   else if(S.route==='portal-employees') wireEmployees();
   else if(S.route==='portal-reports') wireReports();
+  else if(S.route==='portal-trash') wireTrash();
   else if(S.route==='portal-account') wireAccount();
   else if(S.route==='portal-dashboard') wireDashboard();
 }
@@ -779,7 +786,7 @@ function landingBodySubmitHtml(){
   <div class="center-pad" style="padding:10px 4px 4px">
     ${icon('camera')}
     <h3 style="font-size:15.5px;margin:14px 0 8px;color:var(--ink-900)">تحتاج تغطية تصوير أو فيديو؟</h3>
-    <p class="muted" style="line-height:1.7;margin-bottom:20px">عبّئي استمارة طلب خدمات التصوير وسيتواصل معك فريق التصوير لتنسيق التغطية</p>
+    <p class="muted" style="line-height:1.7;margin-bottom:20px">تعبئة استمارة طلب خدمات التصوير تتيح لفريق التصوير التواصل لتنسيق التغطية</p>
     <button class="btn btn-primary btn-block" id="goRequestForm">${icon('send')} تقديم طلب جديد</button>
   </div>`;
 }
@@ -1089,11 +1096,12 @@ function requestServiceIcons(r){
 }
 function renderDashboard(){
   const mKey=todayISO().slice(0,7);
-  const newReq=S.requests.filter(r=>r.status==='submitted').length;
-  const urgentReq=S.requests.filter(r=>r.priority==='urgent'&&r.status!=='completed').length;
+  const activeReq=S.requests.filter(r=>!r.deleted);
+  const newReq=activeReq.filter(r=>r.status==='submitted').length;
+  const urgentReq=activeReq.filter(r=>r.priority==='urgent'&&r.status!=='completed').length;
   const visitsThisMonth=S.visits.filter(v=>monthKey(v.date)===mKey).length;
   const upcomingMeetings=S.meetings.filter(m=>m.date>=todayISO());
-  const recentReq=S.requests.slice(0,5);
+  const recentReq=activeReq.slice(0,5);
   return `
   <div class="section-title-row" style="margin-top:4px">
     <div>
@@ -1136,8 +1144,8 @@ function renderDashboard(){
   </div>
 
   <div class="form-actions">
-    <button class="btn btn-outline" data-go="portal-visit-add">${icon('plus')} إضافة زيارة</button>
-    <button class="btn btn-outline" data-go="portal-meeting-add">${icon('plus')} إضافة اجتماع</button>
+    <button class="btn btn-tan" data-go="portal-visit-add">${icon('plus')} إضافة زيارة</button>
+    <button class="btn btn-blue" data-go="portal-meeting-add">${icon('plus')} إضافة اجتماع</button>
   </div>
   `;
 }
@@ -1179,7 +1187,7 @@ function wireDashboard(){
 function requestsListDynamicHtml(){
   const statusFilter=S.filters.requests;
   const searchQ=(S.filters.requestsSearch||'').trim().toLowerCase();
-  let list=S.requests;
+  let list=S.requests.filter(r=>!r.deleted);
   if(statusFilter!=='all') list=list.filter(r=>r.status===statusFilter);
   if(searchQ){
     list=list.filter(r=>
@@ -1241,7 +1249,17 @@ function renderRequestDetail(id){
   const assignedPhotographers=(r.internal&&r.internal.assignedPhotographers)||[];
   const assignedEditors=(r.internal&&r.internal.assignedEditors)||[];
   return `
-  <button class="btn btn-ghost btn-sm" data-go="portal-requests" style="margin-bottom:10px">${icon('chev')} رجوع للطلبات</button>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+    <button class="btn btn-ghost btn-sm" data-go="portal-requests">${icon('chev')} رجوع للطلبات</button>
+    ${(S.user.role==='lead'&&!r.deleted)?`<button class="btn btn-danger btn-sm" id="deleteReqBtn">${icon('trash')} حذف الطلب</button>`:''}
+  </div>
+  ${r.deleted?`
+  <div class="section" style="margin-bottom:14px;border-color:var(--red-600)">
+    <div class="section-body" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:8px;color:var(--red-700)">${icon('trash')}<span style="font-weight:700;font-size:13.5px">هذا الطلب في سلة المحذوفات</span></div>
+      ${S.user.role==='lead'?`<button class="btn btn-outline btn-sm" id="restoreReqBtn">${icon('check')} استعادة</button>`:''}
+    </div>
+  </div>`:''}
 
   <div class="section" style="margin-bottom:14px">
     <div class="section-body">
@@ -1350,7 +1368,7 @@ function renderRequestDetail(id){
   <div class="section">
     <div class="section-head">${icon('doc')} المرفقات والملفات</div>
     <div class="section-body">
-      <p class="muted" style="margin-bottom:10px">أضيفي رابط الملف من الملف المشترك أو قوقل درايف مع وصف مختصر</p>
+      <p class="muted" style="margin-bottom:10px">إضافة رابط الملف من الملف المشترك أو قوقل درايف مع وصف مختصر</p>
       <div id="attachList">
         ${(r.attachments&&r.attachments.length)?r.attachments.map((a,i)=>`
           <div class="list-item" style="padding:10px 0;border-bottom:1px solid var(--line)">
@@ -1404,6 +1422,22 @@ function wireRequestDetail(id){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   const r=S.requests.find(x=>x.id===id);
   if(!r) return;
+  const delBtn=$('#deleteReqBtn');
+  if(delBtn) delBtn.addEventListener('click',async()=>{
+    if(!confirm(`نقل الطلب "${r.event&&r.event.name||''}" إلى سلة المحذوفات؟ يمكن استعادته لاحقاً.`)) return;
+    try{
+      await updateDoc(doc(db,'requests',id),{deleted:true, deletedAt:serverTimestamp(), deletedBy:S.user.name});
+      toast('تم نقل الطلب إلى سلة المحذوفات');
+      go('portal-requests');
+    }catch(err){ console.error(err); toast('تعذر الحذف',true); }
+  });
+  const resBtn=$('#restoreReqBtn');
+  if(resBtn) resBtn.addEventListener('click',async()=>{
+    try{
+      await updateDoc(doc(db,'requests',id),{deleted:false, deletedAt:null, deletedBy:null});
+      toast('تمت استعادة الطلب');
+    }catch(err){ console.error(err); toast('تعذر الاستعادة',true); }
+  });
   $all('#internalForm [data-tile] input[type=checkbox]').forEach(cb=>{
     cb.addEventListener('change',()=>cb.closest('[data-tile]').classList.toggle('on',cb.checked));
   });
@@ -1502,7 +1536,7 @@ function visitsMonthOptions(){
   return Array.from(set).sort().reverse();
 }
 function visitsListInnerHtml(list){
-  if(list.length===0) return `<div class="section"><div class="empty-state">${icon('pin')}<h3>لا توجد زيارات مسجّلة</h3><p>أضيفي أول زيارة لهذا الشهر</p></div></div>`;
+  if(list.length===0) return `<div class="section"><div class="empty-state">${icon('pin')}<h3>لا توجد زيارات مسجّلة</h3><p>لم تُسجَّل أي زيارة لهذا الشهر بعد</p></div></div>`;
   return list.map(v=>`
     <div class="section" style="margin-bottom:12px">
       <div class="section-head">${icon('calendar')} ${fmtDate(v.date)}</div>
@@ -1653,7 +1687,7 @@ function taskListItemHtml(t){
 }
 function renderTasksList(){
   const filter=S.filters.tasksStatus||'all';
-  let list=S.tasks.slice().sort((a,b)=>(b.startDate||'').localeCompare(a.startDate||''));
+  let list=S.tasks.filter(t=>!t.deleted).sort((a,b)=>(b.startDate||'').localeCompare(a.startDate||''));
   if(filter!=='all') list=list.filter(t=>(t.status||'not_started')===filter);
   const chips=[['all','الكل'],['in_progress','جاري العمل'],['completed','تم الانتهاء'],['not_started','لم يبدأ']];
   return `
@@ -1664,7 +1698,7 @@ function renderTasksList(){
     ${chips.map(([k,l])=>`<button class="chip ${filter===k?'on':''}" data-tfilter="${k}">${l}</button>`).join('')}
   </div>
   <div class="section">
-    ${list.length===0?`<div class="empty-state">${icon('tasks')}<h3>لا توجد مهام مسجّلة</h3><p>أضيفي أول مهمة أو مشروع للفريق</p></div>`:
+    ${list.length===0?`<div class="empty-state">${icon('tasks')}<h3>لا توجد مهام مسجّلة</h3><p>يمكن إضافة أول مهمة أو مشروع للفريق</p></div>`:
       list.map(t=>taskListItemHtml(t)).join('')}
   </div>`;
 }
@@ -1738,7 +1772,17 @@ function renderTaskDetail(id){
   const t=S.tasks.find(x=>x.id===id);
   if(!t) return `<div class="empty-state">${icon('alert')}<h3>المهمة غير موجودة</h3></div>`;
   return `
-  <button class="btn btn-ghost btn-sm" data-go="portal-tasks" style="margin-bottom:10px">${icon('chev')} رجوع</button>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+    <button class="btn btn-ghost btn-sm" data-go="portal-tasks">${icon('chev')} رجوع</button>
+    ${(S.user.role==='lead'&&!t.deleted)?`<button class="btn btn-danger btn-sm" id="deleteTaskBtn">${icon('trash')} حذف المهمة</button>`:''}
+  </div>
+  ${t.deleted?`
+  <div class="section" style="margin-bottom:14px;border-color:var(--red-600)">
+    <div class="section-body" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:8px;color:var(--red-700)">${icon('trash')}<span style="font-weight:700;font-size:13.5px">هذه المهمة في سلة المحذوفات</span></div>
+      ${S.user.role==='lead'?`<button class="btn btn-outline btn-sm" id="restoreTaskBtn">${icon('check')} استعادة</button>`:''}
+    </div>
+  </div>`:''}
   <div class="section"><div class="section-body">
     <form id="taskEditForm">
       <div class="field"><label>عنوان المهمة / المشروع</label><input class="input" name="title" value="${esc(t.title)}" required></div>
@@ -1759,6 +1803,23 @@ function renderTaskDetail(id){
 function wireTaskDetail(id){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   wireTaskStatusPills();
+  const t=S.tasks.find(x=>x.id===id);
+  const delBtn=$('#deleteTaskBtn');
+  if(delBtn) delBtn.addEventListener('click',async()=>{
+    if(!confirm(`نقل المهمة "${t&&t.title||''}" إلى سلة المحذوفات؟ يمكن استعادتها لاحقاً.`)) return;
+    try{
+      await updateDoc(doc(db,'tasks',id),{deleted:true, deletedAt:serverTimestamp(), deletedBy:S.user.name});
+      toast('تم نقل المهمة إلى سلة المحذوفات');
+      go('portal-tasks');
+    }catch(err){ console.error(err); toast('تعذر الحذف',true); }
+  });
+  const resBtn=$('#restoreTaskBtn');
+  if(resBtn) resBtn.addEventListener('click',async()=>{
+    try{
+      await updateDoc(doc(db,'tasks',id),{deleted:false, deletedAt:null, deletedBy:null});
+      toast('تمت استعادة المهمة');
+    }catch(err){ console.error(err); toast('تعذر الاستعادة',true); }
+  });
   const f=$('#taskEditForm');
   if(f) f.addEventListener('submit',async(e)=>{
     e.preventDefault();
@@ -1776,6 +1837,63 @@ function wireTaskDetail(id){
       setLoading(btn,false,'<span>'+icon('check')+' حفظ التعديلات</span>');
     }catch(err){ console.error(err); setLoading(btn,false,'<span>'+icon('check')+' حفظ التعديلات</span>'); toast('تعذر الحفظ',true); }
   });
+}
+
+/* ============================================================
+   سلة المحذوفات (مشرف فقط)
+   ============================================================ */
+function trashItemHtml(kind,id,title,deletedBy,sub){
+  return `
+  <div class="list-item" style="cursor:default;flex-wrap:wrap">
+    <div class="list-item-icon">${icon(kind==='req'?'doc':'tasks')}</div>
+    <div class="list-item-body">
+      <div class="list-item-title">${esc(title||'بدون عنوان')}</div>
+      <div class="list-item-sub">${sub?esc(sub)+' · ':''}${deletedBy?'حذفه '+esc(deletedBy):''}</div>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-outline btn-sm" data-restore="${kind}:${id}">${icon('check')} استعادة</button>
+      <button class="btn btn-danger btn-sm" data-purge="${kind}:${id}">${icon('trash')}</button>
+    </div>
+  </div>`;
+}
+function renderTrash(){
+  if(S.user.role!=='lead') return `<div class="empty-state">${icon('alert')}<h3>هذه الصفحة مخصصة للمشرف فقط</h3></div>`;
+  const deletedReq=S.requests.filter(r=>r.deleted);
+  const deletedTasks=S.tasks.filter(t=>t.deleted);
+  const total=deletedReq.length+deletedTasks.length;
+  return `
+  <div class="section-title-row"><h2>سلة المحذوفات</h2></div>
+  ${total===0?`<div class="section"><div class="empty-state">${icon('trash')}<h3>سلة المحذوفات فارغة</h3></div></div>`:''}
+  ${deletedReq.length?`
+  <div class="section-title-row"><h2 style="font-size:14px">الطلبات المحذوفة (${deletedReq.length})</h2></div>
+  <div class="section" style="margin-bottom:16px">
+    ${deletedReq.map(r=>trashItemHtml('req',r.id,(r.event&&r.event.name),r.deletedBy,r.requestNumber)).join('')}
+  </div>`:''}
+  ${deletedTasks.length?`
+  <div class="section-title-row"><h2 style="font-size:14px">المهام المحذوفة (${deletedTasks.length})</h2></div>
+  <div class="section">
+    ${deletedTasks.map(t=>trashItemHtml('task',t.id,t.title,t.deletedBy)).join('')}
+  </div>`:''}
+  `;
+}
+function wireTrash(){
+  $all('[data-restore]').forEach(b=>b.addEventListener('click',async()=>{
+    const [kind,id]=b.dataset.restore.split(':');
+    const coll=kind==='req'?'requests':'tasks';
+    try{
+      await updateDoc(doc(db,coll,id),{deleted:false, deletedAt:null, deletedBy:null});
+      toast('تمت الاستعادة بنجاح');
+    }catch(err){ console.error(err); toast('تعذر الاستعادة',true); }
+  }));
+  $all('[data-purge]').forEach(b=>b.addEventListener('click',async()=>{
+    const [kind,id]=b.dataset.purge.split(':');
+    const coll=kind==='req'?'requests':'tasks';
+    if(!confirm('حذف نهائي، لا يمكن التراجع عنه بعد ذلك. المتابعة؟')) return;
+    try{
+      await deleteDoc(doc(db,coll,id));
+      toast('تم الحذف النهائي');
+    }catch(err){ console.error(err); toast('تعذر الحذف',true); }
+  }));
 }
 
 /* ============================================================
@@ -1811,7 +1929,7 @@ async function runHistoricalImport(){
     toast('تم استيراد السجلات القديمة بنجاح');
   }catch(err){
     console.error(err);
-    toast('تعذر إتمام الاستيراد، تأكدي من قواعد الأمان (Rules) وحاولي مرة أخرى',true);
+    toast('تعذر إتمام الاستيراد، الرجاء التحقق من قواعد الأمان (Rules) والمحاولة مرة أخرى',true);
   }
 }
 
@@ -2096,7 +2214,7 @@ function reportPeriodBounds(type,value){
   return {start:`${y}-01-01`,end:`${y}-12-31`,label:`سنة ${y}`};
 }
 function computeReportStats(start,end){
-  const reqInPeriod=S.requests.filter(r=>r.event&&r.event.date&&r.event.date>=start&&r.event.date<=end);
+  const reqInPeriod=S.requests.filter(r=>!r.deleted&&r.event&&r.event.date&&r.event.date>=start&&r.event.date<=end);
   const visitsInPeriod=S.visits.filter(v=>v.date&&v.date>=start&&v.date<=end);
   const meetingsInPeriod=S.meetings.filter(m=>m.date&&m.date>=start&&m.date<=end);
   const reqByStatus={submitted:0,received:0,assigned:0,completed:0};
@@ -2262,7 +2380,7 @@ function renderAccount(){
         <div class="field">
           <label>الرقم السري الحالي</label>
           <input class="input" type="password" name="cur" required>
-          ${forced?'<div class="hint">إذا لم تغيّريه من قبل، فهو 123456</div>':''}
+          ${forced?'<div class="hint">إذا لم يتم تغييره بعد، فهو 123456</div>':''}
         </div>
         <div class="field" style="margin-bottom:0"><label>الرقم السري الجديد</label><input class="input" type="password" name="next" minlength="6" required></div>
         <div class="err-text" id="pwErr" style="display:none"></div>
