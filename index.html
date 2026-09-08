@@ -416,6 +416,7 @@ const S = {
   meetings:[],
   ready:false,
   menuOpen:false,
+  pendingLoginError:null,
   filters:{ requests:'all', requestsSearch:'', visitsMonth:null }
 };
 
@@ -564,12 +565,15 @@ onAuthStateChanged(auth, async (fbUser)=>{
         /* حساب موظف تم تعطيله من قبل المشرف */
         S.user=null;
         await signOut(auth);
-        toast('هذا الحساب معطّل، الرجاء التواصل مع المشرف',true);
+        S.pendingLoginError='هذا الحساب معطّل، الرجاء التواصل مع المشرف';
+        go('login');
       } else {
         /* حساب مصادقة بلا ملف موظف مرتبط - حالة استثنائية */
+        console.error('لا يوجد مستند Firestore يطابق UID:', fbUser.uid, '— تأكدي إن معرّف المستند بمجموعة employees مطابق تماماً لهذا الـ UID');
         S.user=null;
         await signOut(auth);
-        toast('لا يوجد ملف موظف مرتبط بهذا الحساب، الرجاء التواصل مع المشرف',true);
+        S.pendingLoginError='لا يوجد ملف موظف مرتبط بهذا الحساب، الرجاء التواصل مع المشرف';
+        go('login');
       }
     }catch(e){ console.error(e); }
   } else {
@@ -770,7 +774,9 @@ function landingBodyLoginHtml(err){
   <div class="linkrow">هذا الدخول مخصص لموظفي فريق التصوير فقط</div>`;
 }
 function wireLanding(){
-  renderLandingBody();
+  const pending=S.pendingLoginError;
+  S.pendingLoginError=null;
+  renderLandingBody(pending);
   $all('[data-tab]').forEach(b=>b.addEventListener('click',()=>{landingTab=b.dataset.tab;render();}));
   const gf=$('#goRequestForm'); if(gf) gf.addEventListener('click',()=>go('request-form'));
 }
