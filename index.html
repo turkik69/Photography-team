@@ -559,30 +559,32 @@ onAuthStateChanged(auth, async (fbUser)=>{
       if(snap.exists() && snap.data().active!==false){
         S.user={id:fbUser.uid,...snap.data()};
         subscribeAll();
-        if(S.user.mustChangePassword){ go('portal-account'); }
-        else if(S.route==='landing'||S.route==='login') go('portal-dashboard');
+        S.ready=true;
+        if(S.user.mustChangePassword){ go('portal-account'); return; }
+        if(S.route==='landing'||S.route==='login'){ go('portal-dashboard'); return; }
+        render(); return;
       } else if(snap.exists()){
         /* حساب موظف تم تعطيله من قبل المشرف */
         S.user=null;
         await signOut(auth);
         S.pendingLoginError='هذا الحساب معطّل، الرجاء التواصل مع المشرف';
-        go('login');
+        S.ready=true; go('login'); return;
       } else {
         /* حساب مصادقة بلا ملف موظف مرتبط - حالة استثنائية */
         console.error('لا يوجد مستند Firestore يطابق UID:', fbUser.uid, '— تأكدي إن معرّف المستند بمجموعة employees مطابق تماماً لهذا الـ UID');
         S.user=null;
         await signOut(auth);
         S.pendingLoginError='لا يوجد ملف موظف مرتبط بهذا الحساب، الرجاء التواصل مع المشرف';
-        go('login');
+        S.ready=true; go('login'); return;
       }
-    }catch(e){ console.error(e); }
+    }catch(e){ console.error(e); S.ready=true; render(); return; }
   } else {
     S.user=null; clearSubs();
     S.employees=[];S.requests=[];S.visits=[];S.meetings=[];
-    if(S.route.startsWith('portal')) go('landing');
+    S.ready=true;
+    if(S.route.startsWith('portal')){ go('landing'); return; }
+    render();
   }
-  S.ready=true;
-  render();
 });
 
 /* ---------------- القشرة العامة (Shell) للبوابة الداخلية ---------------- */
@@ -774,10 +776,8 @@ function landingBodyLoginHtml(err){
   <div class="linkrow">هذا الدخول مخصص لموظفي فريق التصوير فقط</div>`;
 }
 function wireLanding(){
-  const pending=S.pendingLoginError;
-  S.pendingLoginError=null;
-  renderLandingBody(pending);
-  $all('[data-tab]').forEach(b=>b.addEventListener('click',()=>{landingTab=b.dataset.tab;render();}));
+  renderLandingBody(S.pendingLoginError);
+  $all('[data-tab]').forEach(b=>b.addEventListener('click',()=>{S.pendingLoginError=null; landingTab=b.dataset.tab;render();}));
   const gf=$('#goRequestForm'); if(gf) gf.addEventListener('click',()=>go('request-form'));
 }
 function renderLandingBody(loginErr){
@@ -794,6 +794,7 @@ function renderLandingBody(loginErr){
     const f=$('#loginForm');
     if(f) f.addEventListener('submit',async(e)=>{
       e.preventDefault();
+      S.pendingLoginError=null;
       const btn=$('#loginSubmitBtn');
       const empNo=f.empNo.value.trim();
       const pass=f.password.value;
