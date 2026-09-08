@@ -356,12 +356,12 @@ textarea.input{resize:vertical;min-height:78px}
    الرجاء تعبئة بيانات مشروعك في Firebase Console هنا
    (نفس الطريقة المستخدمة في مشاريع التصميم المركزي) */
 const firebaseConfig = {
-  apiKey: "AIzaSyDYWNRWxkLVBXJ3APLQmhcqUcW0kxkhQK4",
-  authDomain: "photography-team-ca9e4.firebaseapp.com",
-  projectId: "photography-team-ca9e4",
-  storageBucket: "photography-team-ca9e4.firebasestorage.app",
-  messagingSenderId: "...",
-  appId: "..."
+  apiKey: "ضع_API_KEY_هنا",
+  authDomain: "ضع_AUTH_DOMAIN_هنا",
+  projectId: "ضع_PROJECT_ID_هنا",
+  storageBucket: "ضع_STORAGE_BUCKET_هنا",
+  messagingSenderId: "ضع_SENDER_ID_هنا",
+  appId: "ضع_APP_ID_هنا"
 };
 const AUTH_DOMAIN_SUFFIX = "@phototeam-mm.local"; /* دومين وهمي داخلي لتحويل الرقم الوظيفي إلى بريد لأغراض المصادقة فقط */
 
@@ -527,17 +527,18 @@ onAuthStateChanged(auth, async (fbUser)=>{
       if(snap.exists() && snap.data().active!==false){
         S.user={id:fbUser.uid,...snap.data()};
         subscribeAll();
-        if(S.route==='landing'||S.route==='login') go('portal-dashboard');
+        if(S.user.mustChangePassword){ go('portal-account'); }
+        else if(S.route==='landing'||S.route==='login') go('portal-dashboard');
       } else if(snap.exists()){
-        /* حساب موظف تم تعطيله من قبل رئيس الفريق */
+        /* حساب موظف تم تعطيله من قبل المشرف */
         S.user=null;
         await signOut(auth);
-        toast('هذا الحساب معطّل، الرجاء التواصل مع رئيس الفريق',true);
+        toast('هذا الحساب معطّل، الرجاء التواصل مع المشرف',true);
       } else {
         /* حساب مصادقة بلا ملف موظف مرتبط - حالة استثنائية */
         S.user=null;
         await signOut(auth);
-        toast('لا يوجد ملف موظف مرتبط بهذا الحساب، الرجاء التواصل مع رئيس الفريق',true);
+        toast('لا يوجد ملف موظف مرتبط بهذا الحساب، الرجاء التواصل مع المشرف',true);
       }
     }catch(e){ console.error(e); }
   } else {
@@ -561,6 +562,11 @@ function initials(name){
   const parts=name.trim().split(/\s+/);
   return parts[0]?parts[0][0]:'؟';
 }
+function empTileLabel(e){
+  return e.jobTitle
+    ? `<span style="display:flex;flex-direction:column;line-height:1.35"><span>${esc(e.name)}</span><small class="muted" style="font-size:11px">${esc(e.jobTitle)}</small></span>`
+    : `<span>${esc(e.name)}</span>`;
+}
 function topbarHtml(){
   const u=S.user;
   return `
@@ -578,7 +584,7 @@ function topbarHtml(){
         <div class="topbar-menu" id="topMenu">
           <div style="padding:12px 14px;border-bottom:1px solid var(--line)">
             <div style="font-weight:800;font-size:13.5px">${esc(u.name)}</div>
-            <div class="muted" style="margin-top:2px">${esc(u.employeeNumber)} · ${u.role==='lead'?'رئيس الفريق':'عضو الفريق'}</div>
+            <div class="muted" style="margin-top:2px">${esc(u.employeeNumber)} · ${u.role==='lead'?'مشرف':'عضو الفريق'}</div>
           </div>
           ${u.role==='lead'?`<button data-go="portal-employees">${icon('users')} إدارة الموظفين</button>`:''}
           <button data-go="portal-account">${icon('key')} تغيير كلمة المرور</button>
@@ -1245,7 +1251,7 @@ function renderRequestDetail(id){
             ${S.employees.map(e=>`
               <label class="check-tile ${assignedPhotographers.includes(e.id)?'on':''}" data-tile>
                 <input type="checkbox" name="photog_${e.id}" ${assignedPhotographers.includes(e.id)?'checked':''}>
-                <span class="avatar-sm">${esc(initials(e.name))}</span><span>${esc(e.name)}</span>
+                <span class="avatar-sm">${esc(initials(e.name))}</span>${empTileLabel(e)}
               </label>`).join('')||'<p class="muted">لا يوجد موظفون مسجلون بعد</p>'}
           </div>
         </div>
@@ -1255,7 +1261,7 @@ function renderRequestDetail(id){
             ${S.employees.map(e=>`
               <label class="check-tile ${assignedEditors.includes(e.id)?'on':''}" data-tile>
                 <input type="checkbox" name="editor_${e.id}" ${assignedEditors.includes(e.id)?'checked':''}>
-                <span class="avatar-sm">${esc(initials(e.name))}</span><span>${esc(e.name)}</span>
+                <span class="avatar-sm">${esc(initials(e.name))}</span>${empTileLabel(e)}
               </label>`).join('')||'<p class="muted">لا يوجد موظفون مسجلون بعد</p>'}
           </div>
         </div>
@@ -1541,7 +1547,7 @@ function renderMeetingAdd(){
       <div class="field">
         <label>الحضور من الفريق</label>
         <div class="check-grid">
-          ${S.employees.map(e=>`<label class="check-tile" data-tile><input type="checkbox" name="att_${e.id}"><span class="avatar-sm">${esc(initials(e.name))}</span><span>${esc(e.name)}</span></label>`).join('')||'<p class="muted">لا يوجد موظفون بعد</p>'}
+          ${S.employees.map(e=>`<label class="check-tile" data-tile><input type="checkbox" name="att_${e.id}"><span class="avatar-sm">${esc(initials(e.name))}</span>${empTileLabel(e)}</label>`).join('')||'<p class="muted">لا يوجد موظفون بعد</p>'}
         </div>
       </div>
       <div class="field"><label>حضور إضافي (خارج الفريق)</label><input class="input" name="extraAttendees" placeholder="أسماء مفصولة بفاصلة"></div>
@@ -1624,7 +1630,7 @@ function wireMeetingDetail(id){
    ============================================================ */
 function renderEmployees(){
   if(S.user.role!=='lead'){
-    return `<div class="empty-state">${icon('alert')}<h3>هذه الصفحة مخصصة لرئيس الفريق فقط</h3></div>`;
+    return `<div class="empty-state">${icon('alert')}<h3>هذه الصفحة مخصصة للمشرف فقط</h3></div>`;
   }
   return `
   <div class="section-title-row"><h2>إدارة الموظفين</h2>
@@ -1638,9 +1644,9 @@ function renderEmployees(){
         <div class="list-item-body">
           <div class="list-item-title">${esc(e.name)} ${e.active===false?'<span class="muted">(معطّل)</span>':''}</div>
           <div class="list-item-sub">
-            <span class="badge badge-role-${e.role}">${e.role==='lead'?'رئيس الفريق':'عضو الفريق'}</span>
+            <span class="badge badge-role-${e.role}">${e.role==='lead'?'مشرف':'عضو الفريق'}</span>
             <span>${esc(e.employeeNumber)}</span>
-            ${e.directorate?`<span>· ${esc(e.directorate)}</span>`:''}
+            ${e.jobTitle?`<span>· ${esc(e.jobTitle)}</span>`:''}
           </div>
         </div>
         <button class="btn btn-ghost btn-sm" data-toggle-emp="${e.id}">${e.active===false?'تفعيل':'تعطيل'}</button>
@@ -1655,23 +1661,22 @@ function addEmployeeModalHtml(){
     <div class="sheet">
       <div class="sheet-head"><h3>إضافة موظف جديد</h3><button class="sheet-close" id="closeAddEmp">${icon('x')}</button></div>
       <form id="addEmpForm">
-        <div class="field"><label>الاسم الكامل</label><input class="input" name="name" required></div>
         <div class="row2">
           <div class="field"><label>الرقم الوظيفي</label><input class="input" name="employeeNumber" required inputmode="numeric"></div>
-          <div class="field"><label>المديرية / الدائرة</label><input class="input" name="directorate" value="دائرة الفعاليات والتوعية"></div>
+          <div class="field"><label>الاسم الثلاثي</label><input class="input" name="name" required></div>
         </div>
-        <div class="field">
-          <label>الرقم السري المبدئي</label>
-          <input class="input" name="password" type="text" minlength="6" required>
-          <div class="hint">6 أحرف على الأقل، يمكن للموظف تغييره لاحقاً من حسابه</div>
-        </div>
+        <div class="field"><label>الوظيفة</label><input class="input" name="jobTitle" placeholder="مثال: مصور فوتوغرافي"></div>
         <div class="field">
           <label>الصلاحية</label>
           <div class="radio-row">
             <button type="button" class="radio-pill on" data-role="member">عضو فريق</button>
-            <button type="button" class="radio-pill" data-role="lead">رئيس فريق</button>
+            <button type="button" class="radio-pill" data-role="lead">مشرف</button>
           </div>
           <input type="hidden" name="role" value="member">
+        </div>
+        <div class="field" style="background:var(--green-50);border-radius:var(--radius-s);padding:11px 13px;margin-bottom:6px">
+          <div style="font-size:13px;font-weight:700;color:var(--green-800)">الرقم السري الافتراضي: 123456</div>
+          <div class="hint" style="margin-top:3px">يمكن للموظف تغييره من صفحة "حسابي" بعد الدخول، وسيُطلب منه ذلك تلقائياً في أول تسجيل دخول</div>
         </div>
         <div class="err-text" id="addEmpErr" style="display:none"></div>
         <button class="btn btn-primary btn-block" type="submit" id="addEmpSubmitBtn" style="margin-top:6px">${icon('check')} إنشاء الحساب</button>
@@ -1694,6 +1699,7 @@ function wireEmployees(){
     }catch(err){ console.error(err); toast('تعذر تنفيذ العملية',true); }
   }));
 }
+const DEFAULT_EMP_PASSWORD='123456';
 function wireAddEmpModal(){
   const ov=$('#addEmpOverlay');
   $('#closeAddEmp').addEventListener('click',()=>ov.remove());
@@ -1708,7 +1714,6 @@ function wireAddEmpModal(){
     const errEl=$('#addEmpErr'); errEl.style.display='none';
     const fd=new FormData(e.target);
     const empNo=(fd.get('employeeNumber')||'').trim();
-    const password=fd.get('password')||'';
     const btn=$('#addEmpSubmitBtn');
     if(S.employees.some(x=>x.employeeNumber===empNo)){
       errEl.textContent='هذا الرقم الوظيفي مسجّل مسبقاً'; errEl.style.display='block'; return;
@@ -1718,21 +1723,22 @@ function wireAddEmpModal(){
     try{
       secondaryApp=initializeApp(firebaseConfig,'secondary-'+Date.now());
       const secondaryAuth=getAuth(secondaryApp);
-      const cred=await createUserWithEmailAndPassword(secondaryAuth, empNo+AUTH_DOMAIN_SUFFIX, password);
+      const cred=await createUserWithEmailAndPassword(secondaryAuth, empNo+AUTH_DOMAIN_SUFFIX, DEFAULT_EMP_PASSWORD);
       const newUid=cred.user.uid;
       await setDoc(doc(db,'employees',newUid),{
-        name:fd.get('name')||'', employeeNumber:empNo, directorate:fd.get('directorate')||'',
-        role:fd.get('role')||'member', active:true, createdAt:serverTimestamp()
+        name:fd.get('name')||'', employeeNumber:empNo, jobTitle:fd.get('jobTitle')||'',
+        directorate:'دائرة الفعاليات والتوعية',
+        role:fd.get('role')||'member', active:true, mustChangePassword:true, createdAt:serverTimestamp()
       });
       await signOut(secondaryAuth);
       await deleteApp(secondaryApp);
-      toast('تم إنشاء حساب الموظف بنجاح');
+      toast('تم إنشاء حساب الموظف بنجاح — الرقم السري الافتراضي 123456');
       const w=$('#addEmpOverlay'); if(w) w.remove();
     }catch(err){
       console.error(err);
       setLoading(btn,false,'<span>'+icon('check')+' إنشاء الحساب</span>');
       let msg='تعذر إنشاء الحساب';
-      if(err.code==='auth/weak-password') msg='الرقم السري ضعيف جداً، استخدمي 6 أحرف على الأقل';
+      if(err.code==='auth/weak-password') msg='الرقم السري ضعيف جداً';
       if(err.code==='auth/email-already-in-use') msg='هذا الرقم الوظيفي مسجّل مسبقاً';
       errEl.textContent=msg; errEl.style.display='block';
       if(secondaryApp){ try{await deleteApp(secondaryApp);}catch(e2){} }
@@ -1744,17 +1750,29 @@ function wireAddEmpModal(){
    حسابي - تغيير الرقم السري
    ============================================================ */
 function renderAccount(){
+  const forced=S.user.mustChangePassword;
   return `
   <div class="section-title-row"><h2>حسابي</h2></div>
+  ${forced?`
+  <div class="section" style="margin-bottom:14px;border-color:var(--gold-500)">
+    <div class="section-body" style="display:flex;gap:10px;align-items:flex-start">
+      <span style="color:var(--gold-600);flex:none">${icon('alert')}</span>
+      <p style="font-size:13px;line-height:1.7;color:var(--ink-700)">حسابك يستخدم الرقم السري الافتراضي، الرجاء تغييره الآن قبل المتابعة</p>
+    </div>
+  </div>`:''}
   <div class="section" style="margin-bottom:14px"><div class="section-body">
     <div class="kv"><span class="k">الاسم</span><span class="v">${esc(S.user.name)}</span></div>
     <div class="kv"><span class="k">الرقم الوظيفي</span><span class="v">${esc(S.user.employeeNumber)}</span></div>
-    <div class="kv"><span class="k">الصلاحية</span><span class="v">${S.user.role==='lead'?'رئيس الفريق':'عضو الفريق'}</span></div>
+    <div class="kv"><span class="k">الصلاحية</span><span class="v">${S.user.role==='lead'?'مشرف':'عضو الفريق'}</span></div>
   </div></div>
   <div class="section"><div class="section-head">${icon('key')} تغيير الرقم السري</div>
     <div class="section-body">
       <form id="pwForm">
-        <div class="field"><label>الرقم السري الحالي</label><input class="input" type="password" name="cur" required></div>
+        <div class="field">
+          <label>الرقم السري الحالي</label>
+          <input class="input" type="password" name="cur" required>
+          ${forced?'<div class="hint">إذا لم تغيّريه من قبل، فهو 123456</div>':''}
+        </div>
         <div class="field" style="margin-bottom:0"><label>الرقم السري الجديد</label><input class="input" type="password" name="next" minlength="6" required></div>
         <div class="err-text" id="pwErr" style="display:none"></div>
         <button class="btn btn-primary" type="submit" style="margin-top:14px">${icon('check')} تحديث الرقم السري</button>
@@ -1773,6 +1791,9 @@ function wireAccount(){
       const cred=EmailAuthProvider.credential(S.fbUser.email, fd.get('cur'));
       await reauthenticateWithCredential(S.fbUser, cred);
       await updatePassword(S.fbUser, fd.get('next'));
+      if(S.user.mustChangePassword){
+        await updateDoc(doc(db,'employees',S.user.id),{mustChangePassword:false});
+      }
       toast('تم تحديث الرقم السري بنجاح');
       e.target.reset();
       setLoading(btn,false,'<span>'+icon('check')+' تحديث الرقم السري</span>');
