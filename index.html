@@ -649,7 +649,7 @@ function topbarHtml(){
           <button data-go="portal-employees">${icon('users')} إدارة الموظفين</button>
           <button data-go="portal-reports">${icon('gauge')} التقارير والأداء</button>
           <button id="backupBtn">${icon('doc')} نسخة احتياطية</button>
-          <button id="importBtn">${icon('tasks')} استيراد السجلات القديمة</button>
+          <button id="importBtn">${icon('tasks')} استيراد من ملف Excel</button>
           <button data-go="portal-trash">${icon('trash')} سلة المحذوفات</button>
           `:''}
           <button data-go="portal-account">${icon('key')} تغيير كلمة المرور</button>
@@ -739,7 +739,7 @@ function wireShellEvents(){
   const bk=$('#backupBtn');
   if(bk) bk.addEventListener('click',runBackupExport);
   const imp=$('#importBtn');
-  if(imp) imp.addEventListener('click',runHistoricalImport);
+  if(imp) imp.addEventListener('click',openImportModal);
 }
 function wirePortalRoute(){
   if(S.route==='portal-requests') wireRequestsList();
@@ -1897,40 +1897,175 @@ function wireTrash(){
 }
 
 /* ============================================================
-   استيراد السجلات القديمة (جدول الأعمال + جدول الزيارات الأصليين)
-   بيانات ثابتة مستخرجة من ملفات Excel الأصلية مع تصحيح التواريخ
+   استيراد من ملف Excel (جدول الزيارات أو جدول الأعمال)
+   يفتح منتقي الملفات الأصلي لنظام التشغيل (سطح المكتب أو أي مجلد)
    ============================================================ */
-const HISTORICAL_IMPORT_DATA = {"visits": [{"date": "2026-08-06", "sites": [{"taskType": "تقييم", "projectName": "وحدة التخزين", "location": "بلدية مسقط (مسقط)", "description": "تم انشاء تقرير مبدئي لتقييم الوضع الراهن في وحدة التخزين"}, {"taskType": "تصوير مراحل المشروع", "projectName": "مشروع متنزه السيفة", "location": "السيفة", "description": ""}, {"taskType": "تصوير مراحل المشروع", "projectName": "انشاء ممشى بندر الخيران", "location": "بندر الخيران", "description": ""}]}, {"date": "2026-08-10", "sites": [{"taskType": "تصوير مراحل المشروع", "projectName": "حماية جانبية للطريق", "location": "قنتب", "description": ""}, {"taskType": "تصوير مراحل المشروع", "projectName": "انشاء منتزه الراوية بمحافظة مسقط", "location": "مسقط", "description": ""}, {"taskType": "تصوير مراحل المشروع", "projectName": "صيانة الواجهة البحرية كورنيش مطرح", "location": "مطرح", "description": "تم إضافة الصور في الملف المشترك"}, {"taskType": "برنامج أثر", "projectName": "الكتابة على الجدران", "location": "مطرح", "description": "تم إضافة الصور في الملف المشترك"}, {"taskType": "تصوير مراحل المشروع", "projectName": "عمل الحمايات بنهاية مجرى وادي دارسيت", "location": "دارسيت", "description": ""}]}, {"date": "2026-08-12", "sites": [{"taskType": "تصوير مراحل المشروع", "projectName": "التشجير - مول مسقط", "location": "المعبيلة", "description": ""}, {"taskType": "تصوير مراحل المشروع", "projectName": "التشجير - الهبطة - وادي العرش", "location": "السيب", "description": "زيارة فقط"}, {"taskType": "تصوير مراحل المشروع", "projectName": "التشجير - مقابل قصر السيب", "location": "السيب", "description": ""}, {"taskType": "تصوير مراحل المشروع", "projectName": "التشجير - شارع البركات", "location": "السيب", "description": "زيارة فقط"}, {"taskType": "تصوير مراحل المشروع", "projectName": "متنزه", "location": "الخوض السابعة", "description": "تم الانتهاء من المشروع"}, {"taskType": "تصوير مراحل المشروع", "projectName": "مواقف السيارات - امام مكتب عادل الصبحي الاستشارات الهندسية", "location": "الخوض", "description": ""}, {"taskType": "تصوير مراحل المشروع", "projectName": "مقابل استراحة السهالة", "location": "المعبيلة", "description": ""}]}, {"date": "2026-08-13", "sites": [{"taskType": "تصوير مراحل المشروع", "projectName": "تطوير الحي السكني", "location": "الوادي الكبير", "description": "تم إضافة الصور في الملف المشترك"}]}, {"date": "2026-08-16", "sites": [{"taskType": "تصوير المبنى", "projectName": "حدائق الصحوة", "location": "السيب", "description": "تم إضافة الصور في الملف المشترك"}, {"taskType": "برنامج أثر", "projectName": "المرادم العشوائية", "location": "شارع مرتفعات المطار", "description": "تم إضافة الصور في الملف المشترك"}, {"taskType": "تصوير مراحل المشروع", "projectName": "مشروع انشاء شارع", "location": "بوشر", "description": "تم إضافة الصور في الملف المشترك"}, {"taskType": "تصوير مراحل المشروع", "projectName": "حديقة بوشر الشعبية", "location": "بوشر", "description": "تم إضافة الصور في الملف المشترك"}]}, {"date": "2026-08-18", "sites": [{"taskType": "أخرى", "projectName": "الغرض : تحديث الخرائط", "location": "الخوير", "description": "طلب من عائشة GIS - تم التسليم الى الفاضلة سامية"}, {"taskType": "تصوير مراحل المشروع", "projectName": "مشروع شارع", "location": "بوشر", "description": "طلب من الدكتور ناصر - المتابعة مع الفاضل مصعب"}, {"taskType": "تصوير", "projectName": "بيت البرندة", "location": "مطرح", "description": "طلب من المهندس هيثم البحراني (تم إضافة الصور في الملف المشترك)"}]}, {"date": "2026-08-20", "sites": [{"taskType": "تصوير مراحل المشروع", "projectName": "ممشى - المسفاة", "location": "قريات", "description": ""}, {"taskType": "تصوير", "projectName": "مبنى المديرية العامة بلدية مسقط - قريات", "location": "قريات", "description": "طلب من إدارة المبنى - بدر"}]}, {"date": "2026-08-23", "sites": [{"taskType": "تصوير مراحل المشروع", "projectName": "وادي البط", "location": "العامرات", "description": "تم التصوير قبل الانشاء (ممشى + العاب أطفال)"}, {"taskType": "تصوير مراحل المشروع", "projectName": "الجبل الأسود - صياء", "location": "السرين", "description": "اعمال تجميل وتطوير الحي السكني"}]}, {"date": "2026-08-25", "sites": [{"taskType": "تصوير", "projectName": "مبنى المديرية العامة بلدية مسقط - العامرات", "location": "العامرات", "description": "طلب من إدارة المبنى - بدر"}, {"taskType": "تصوير مراحل المشروع", "projectName": "ممشى شارع النهضة", "location": "العامرات", "description": "بريد الكتروني - علياء العبري  - الملف المشترك"}, {"taskType": "تصوير مراحل المشروع", "projectName": "صيانة الطرق العامرات - الحاجر", "location": "العامرات", "description": "بريد الكتروني - علياء العبري - الملف المشترك"}, {"taskType": "تصوير مراحل المشروع", "projectName": "تصميم وانشاء طرق داخلية - العتكية", "location": "العامرات", "description": "بريد الكتروني - علياء العبري - الملف المشترك"}, {"taskType": "تصوير مراحل المشروع", "projectName": "تجهيز ارضيات - انشاء شارع - العتكية", "location": "العامرات", "description": "بريد الكتروني - علياء العبري - الملف المشترك"}, {"taskType": "تصوير مراحل المشروع", "projectName": "الربط بين شارع العامرات وشارع الجود (المرحلة الأولى)", "location": "العامرات", "description": "بريد الكتروني - علياء العبري - الملف المشترك"}]}, {"date": "2026-08-30", "sites": [{"taskType": "تصوير مراحل المشروع", "projectName": "انشاء شارع الانصب", "location": "بوشر", "description": "طلب من محافظة مسقط - محبوبة"}]}, {"date": "2026-09-01", "sites": [{"taskType": "تصوير مراحل المشروع", "projectName": "سد وادي ضيقة", "location": "قريات", "description": ""}, {"taskType": "تصوير مراحل المشروع", "projectName": "صيانة شارع", "location": "مدينة الاعلام", "description": "طلب من الفاضل مصعب - مديرية بوشر"}]}, {"date": "2026-09-02", "sites": [{"taskType": "تصوير", "projectName": "حديقة اليوبيل الذهبي", "location": "السيب", "description": "بريد الكتروني - علياء العبري - الملف المشترك"}]}, {"date": "2026-09-03", "sites": [{"taskType": "تصوير", "projectName": "توثيق -  عملية التنظيف", "location": "مسقط - جبا", "description": "مديرية مسقط"}, {"taskType": "أخرى", "projectName": "دراسة عمل ملاعب رياضية", "location": "شاطي القرم", "description": "مديرية يوشر - محمد بهرام - زيارة فقط"}]}, {"date": "2026-09-06", "sites": [{"taskType": "تصوير", "projectName": "توثيق -  جبا عملية التنظيف", "location": "مسقط - جبا", "description": "مديرية مسقط"}, {"taskType": "تصوير", "projectName": "مرادم عشوائية", "location": "يتي", "description": "مديرية مسقط"}, {"taskType": "مسابقة", "projectName": "استلام كاميرات فورية", "location": "محافظة مسقط", "description": "تصوير فوري كاميرات كوداك"}]}, {"date": "2026-09-07", "sites": [{"taskType": "تصوير", "projectName": "توثيق -  جبا عملية التنظيف", "location": "مسقط - جبا", "description": "مديرية مسقط"}]}], "tasks": [{"title": "استمارة طلب خدمة تصوير", "startDate": "2026-08-06", "endDate": "2026-08-09", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "تم الانتهاء", "notes": ""}, {"title": "انشاء تقرير تفصيلي للمعدات في وحدة التخزين (مسقط)", "startDate": "2026-08-06", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "جاري العمل", "notes": ""}, {"title": "تصوير مراحل المشاريع (يوجد تقرير تفصيلي للزيارات)", "startDate": "2026-08-06", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "جاري العمل", "notes": "تقرير تفصيلي للزيارات  / ملفات الصور في الملف المشترك"}, {"title": "برنامج (أثر)", "startDate": "2026-07-28", "endDate": "", "responsible": ["حنان النبهاني", "وفاء الوهيبي", "فيصل"], "status": "جاري العمل", "notes": "تم تصوير ومونتاج 6 فيديوات"}, {"title": "انشاء بريد الكتروني حاص بفريق التصوير", "startDate": "2026-08-12", "endDate": "", "responsible": ["فريق التصوير"], "status": "تم الانتهاء", "notes": ""}, {"title": "تطبيق العمل على استمارة طلب خدمة تصوير", "startDate": "2026-08-12", "endDate": "", "responsible": ["فريق التصوير"], "status": "تم الانتهاء", "notes": ""}, {"title": "انشاء دليل خدمات فريق التصوير", "startDate": "2026-08-10", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "تم الانتهاء", "notes": "تم اعداد عدد 3 خدمات - قابل للتحديث  (الملف المشترك) غير معتمد"}, {"title": "انشاء استديو تصوير (كروما)", "startDate": "2026-08-16", "endDate": "", "responsible": ["عادل البحراني"], "status": "جاري العمل", "notes": ""}, {"title": "طلب ملف رقمي لصور المشاريع في مسثط", "startDate": "2026-08-12", "endDate": "2026-08-18", "responsible": ["حنان النبهاني"], "status": "تم الانتهاء", "notes": "طلب من محافظة مسقط - يوجد بريد الكتروني  - تم تسليم الملف الى المصور لؤي"}, {"title": "تصوير فعالية (معا من اجل شاطي انظف)", "startDate": "2026-08-17", "endDate": "2026-08-17", "responsible": ["حنان النبهاني"], "status": "تم الانتهاء", "notes": "يوجد رابط للصور وتم تسليمه للمستفيد"}, {"title": "تصوير جلسة حوارية شبابية (محافظة مسقط)", "startDate": "2026-08-19", "endDate": "2026-08-19", "responsible": ["وفاء الوهيبي", "عمار الرئيسي"], "status": "تم الانتهاء", "notes": "فندق انترستي - الفترة بين 4 - 9 مساء"}, {"title": "صور جمالية  ل مسقط Open Data", "startDate": "", "endDate": "", "responsible": ["فريق التصوير"], "status": "", "notes": "الموقع الالكتروني بلدية مسقط Open data"}, {"title": "انشاء مكتبة رقمية للتوثيق", "startDate": "2026-08-06", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "", "notes": ""}, {"title": "احصائيات (نشرة)", "startDate": "2026-08-24", "endDate": "2026-08-26", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "تم الانتهاء", "notes": ""}, {"title": "فيديو تعريفي GIS", "startDate": "", "endDate": "", "responsible": [], "status": "", "notes": "طلب من الفاضلة هدى العفيفي (التفاصيل في البريد الالكتروني) 23/08/2026"}, {"title": "مونتاج صور مركبات شاطئية", "startDate": "2026-08-23", "endDate": "2026-08-24", "responsible": ["عادل البحراني"], "status": "تم الانتهاء", "notes": "طلب من الفاضل عبدالله المقبالي (النقليات) النبذة التعريفية في البريد الالكتروني"}, {"title": "حصر الأدوات والمعدات الخاصة بفريق التصوير", "startDate": "2026-08-24", "endDate": "", "responsible": ["وفاء الوهيبي"], "status": "تم الانتهاء", "notes": "تم النقل التقرير الى الملف المشترك"}, {"title": "فعالية وثقها لتبقى", "startDate": "", "endDate": "", "responsible": [], "status": "", "notes": ""}, {"title": "نسخ المقاطع من الأقراص المرنة الى الملف المشترك", "startDate": "", "endDate": "", "responsible": [], "status": "", "notes": "لا تتوفر أجهزة DVD writer"}, {"title": "منح صلاحية الوصول الى الملف المشترك للمديريات", "startDate": "2026-08-26", "endDate": "", "responsible": ["عادل البحراني"], "status": "", "notes": "view only"}, {"title": "موضوع بيت البرندة", "startDate": "", "endDate": "", "responsible": ["عادل البحراني"], "status": "", "notes": "زيارة وتصوير  - للمناقشة مع الفاضلة عائشة السيابي"}, {"title": "فعالية وعينا يجمعنا", "startDate": "2026-08-29", "endDate": "2026-08-29", "responsible": ["حنان النبهاني", "وفاء الوهيبي"], "status": "تم الانتهاء", "notes": "إدارة الفعاليات والتوعية  - الملف المشترك صور فقط"}, {"title": "تصوير مكتب الرئيس", "startDate": "2026-08-30", "endDate": "2026-08-30", "responsible": ["حنان النبهاني", "وفاء الوهيبي"], "status": "تم الانتهاء", "notes": "طلب من مكتب الرئيس  (أحمد الهنائي)"}, {"title": "نشرة شهرية للتغطيات والزيارات", "startDate": "2026-08-26", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "تم الانتهاء", "notes": "تم ارسال بريد الكتروني (قريق التصوير + م/ هيثم البحراني)"}, {"title": "توثيق اعمال تنظيف المساحات في يتي - جبا", "startDate": "2026-09-03", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "جاري العمل", "notes": "مديرية مسقط"}, {"title": "عمل تصور - مبنى بيت البرندة - ذاكرة مسقط", "startDate": "2026-09-06", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "جاري العمل", "notes": "مبنى بيت البرندة - عرض مرئي"}, {"title": "مسابقة محافظة مسقط للتصوير الفوري", "startDate": "2026-09-06", "endDate": "2026-09-13", "responsible": ["فريق التصوير"], "status": "جاري العمل", "notes": "محافظة مسقط - التنسيق مع لؤي"}, {"title": "طلب تصوير وقوقف الشاحنات في الاحياء السكنية", "startDate": "2026-09-07", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "جاري العمل", "notes": "طلب من المهندس هيثم البحراني -  ملفات الصور في الملف المشترك"}, {"title": "طلب تصوير السيارات الخردة", "startDate": "2026-09-07", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "جاري العمل", "notes": "طلب من المهندس هيثم البحراني -  ملفات الصور في الملف المشترك"}, {"title": "تصميم ملزقات شعار البلدية", "startDate": "2026-09-07", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "جاري العمل", "notes": "انشاء فيلم (تنظيف الجزر)"}, {"title": "تصميم كتاب مسقط", "startDate": "2026-09-07", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "جاري العمل", "notes": "تصميم الغلاف"}]}
-;
-async function runHistoricalImport(){
-  const nV=HISTORICAL_IMPORT_DATA.visits.length, nT=HISTORICAL_IMPORT_DATA.tasks.length;
-  if(!confirm(`سيتم استيراد ${nV} زيارة (بإجمالي ${HISTORICAL_IMPORT_DATA.visits.reduce((s,v)=>s+v.sites.length,0)} موقع) و${nT} مهمة من السجلات السابقة. هل تريدين المتابعة؟`)) return;
-  try{
-    const metaRef=doc(db,'meta','dataImport');
-    const metaSnap=await getDoc(metaRef);
-    if(metaSnap.exists() && metaSnap.data().done){
-      if(!confirm('يبدو أن الاستيراد تم تنفيذه من قبل بهذا التاريخ: '+(metaSnap.data().importedAtLabel||'')+'. تنفيذه مرة أخرى سينشئ نسخاً مكررة من نفس البيانات. متابعة؟')) return;
-    }
-    toast('جاري الاستيراد، الرجاء الانتظار...');
-    for(const v of HISTORICAL_IMPORT_DATA.visits){
-      await addDoc(collection(db,'visits'),{
-        date:v.date, sites:v.sites, createdBy:S.user.name, createdAt:serverTimestamp(), importedFromLegacy:true
-      });
-    }
-    const statusMap={'تم الانتهاء':'completed','جاري العمل':'in_progress'};
-    for(const t of HISTORICAL_IMPORT_DATA.tasks){
-      await addDoc(collection(db,'tasks'),{
-        title:t.title, startDate:t.startDate, endDate:t.endDate, responsible:t.responsible,
-        status: statusMap[t.status]||'not_started', notes:t.notes,
-        createdBy:S.user.name, createdAt:serverTimestamp(), importedFromLegacy:true
-      });
-    }
-    await setDoc(metaRef,{done:true, importedAt:serverTimestamp(), importedAtLabel:fmtDate(todayISO()), importedBy:S.user.name});
-    toast('تم استيراد السجلات القديمة بنجاح');
-  }catch(err){
-    console.error(err);
-    toast('تعذر إتمام الاستيراد، الرجاء التحقق من قواعد الأمان (Rules) والمحاولة مرة أخرى',true);
+let XLSXLib=null, pendingImportData=null, importFileType='visits';
+async function ensureXLSXLoaded(){
+  if(XLSXLib) return XLSXLib;
+  XLSXLib = await import('https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs');
+  return XLSXLib;
+}
+function cellToISODate(cell){
+  if(cell==null) return null;
+  if(cell instanceof Date){
+    const y=cell.getUTCFullYear(), m=cell.getUTCMonth()+1, d=cell.getUTCDate();
+    if(!y||y<1990) return null;
+    return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
   }
+  const s=String(cell).trim();
+  const m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m){
+    const d=parseInt(m[1],10), mo=parseInt(m[2],10), y=parseInt(m[3],10);
+    return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  }
+  return null;
+}
+function parseVisitsRows(rows){
+  const visits=[]; let current=null;
+  for(let i=1;i<rows.length;i++){
+    const row=rows[i]||[];
+    const desc=row[0], taskType=row[1], project=row[2], location=row[3], dateRaw=row[4], batchNum=row[5];
+    if(batchNum==null && desc==null && taskType==null && project==null && location==null && dateRaw==null) continue;
+    if(dateRaw!=null){
+      const iso=cellToISODate(dateRaw);
+      if(iso){ current={date:iso, sites:[]}; visits.push(current); }
+    }
+    if(!current) continue;
+    if(project==null && taskType==null && desc==null) continue;
+    current.sites.push({
+      taskType:(taskType||'أخرى').toString().trim(),
+      projectName:(project||'').toString().trim(),
+      location:(location||'').toString().trim(),
+      description:(desc||'').toString().trim()
+    });
+  }
+  return visits.filter(v=>v.sites.length);
+}
+function parseTasksRows(rows){
+  const tasks=[];
+  for(let i=2;i<rows.length;i++){
+    const row=rows[i]||[];
+    const notes=row[1], status=row[2], responsible=row[3], endRaw=row[4], startRaw=row[5], title=row[6];
+    if(title==null || !String(title).trim()) continue;
+    let respList=[];
+    if(responsible){
+      let raw=String(responsible).replace(/\([^)]*\)/g,'').trim().replace(/ و /g,' - ');
+      respList=raw.split(' - ').map(s=>s.trim()).filter(Boolean);
+    }
+    tasks.push({
+      title:String(title).trim(),
+      startDate:cellToISODate(startRaw)||'',
+      endDate:cellToISODate(endRaw)||'',
+      responsible:respList,
+      status:(status||'').toString().trim(),
+      notes:(notes||'').toString().trim()
+    });
+  }
+  return tasks;
+}
+function importModalHtml(){
+  return `
+  <div class="overlay" id="importOverlay">
+    <div class="sheet">
+      <div class="sheet-head"><h3>استيراد من ملف Excel</h3><button class="sheet-close" id="closeImport">${icon('x')}</button></div>
+      <div class="field">
+        <label>نوع الجدول</label>
+        <div class="radio-row">
+          <button type="button" class="radio-pill on" data-itype="visits">جدول الزيارات</button>
+          <button type="button" class="radio-pill" data-itype="tasks">جدول الأعمال</button>
+        </div>
+        <div class="hint">يجب أن يطابق الملف نفس أعمدة القالب المعتمد لدى الفريق</div>
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label>اختيار الملف</label>
+        <input type="file" id="importFileInput" accept=".xlsx,.xls" class="input">
+      </div>
+      <div id="importPreview" style="margin-top:12px"></div>
+      <button class="btn btn-primary btn-block" id="importConfirmBtn" style="margin-top:14px" disabled>${icon('check')} استيراد</button>
+    </div>
+  </div>`;
+}
+function wireImportModal(){
+  const ov=$('#importOverlay');
+  $('#closeImport').addEventListener('click',()=>{ov.remove(); pendingImportData=null;});
+  ov.addEventListener('click',(e)=>{ if(e.target===ov){ ov.remove(); pendingImportData=null; } });
+  $all('[data-itype]').forEach(b=>b.addEventListener('click',()=>{
+    $all('[data-itype]').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    importFileType=b.dataset.itype;
+    pendingImportData=null;
+    $('#importPreview').innerHTML='';
+    $('#importConfirmBtn').disabled=true;
+    $('#importFileInput').value='';
+  }));
+  $('#importFileInput').addEventListener('change',async(e)=>{
+    const file=e.target.files[0];
+    if(!file) return;
+    const preview=$('#importPreview');
+    preview.innerHTML='<div class="spinner" style="margin:14px auto"></div>';
+    $('#importConfirmBtn').disabled=true;
+    try{
+      const XLSX=await ensureXLSXLoaded();
+      const buf=await file.arrayBuffer();
+      const wb=XLSX.read(buf,{type:'array', cellDates:true});
+      if(importFileType==='visits'){
+        let all=[];
+        wb.SheetNames.forEach(name=>{
+          const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1, defval:null});
+          all=all.concat(parseVisitsRows(rows));
+        });
+        pendingImportData={type:'visits', data:all};
+        const totalSites=all.reduce((s,v)=>s+v.sites.length,0);
+        preview.innerHTML=all.length?
+          `<div class="field" style="background:var(--green-50);border-radius:8px;padding:12px;margin-bottom:0"><strong>${all.length}</strong> زيارة بإجمالي <strong>${totalSites}</strong> موقع جاهزة للاستيراد</div>`:
+          `<div class="err-text">لم يتم العثور على بيانات زيارات صالحة بهذا الملف</div>`;
+      } else {
+        const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1, defval:null});
+        const tasks=parseTasksRows(rows);
+        pendingImportData={type:'tasks', data:tasks};
+        preview.innerHTML=tasks.length?
+          `<div class="field" style="background:var(--green-50);border-radius:8px;padding:12px;margin-bottom:0"><strong>${tasks.length}</strong> مهمة جاهزة للاستيراد</div>`:
+          `<div class="err-text">لم يتم العثور على بيانات مهام صالحة بهذا الملف</div>`;
+      }
+      $('#importConfirmBtn').disabled=!(pendingImportData.data.length);
+    }catch(err){
+      console.error(err);
+      preview.innerHTML=`<div class="err-text">تعذر قراءة الملف، تأكد من أنه بصيغة xlsx وبنفس أعمدة القالب المعتمد</div>`;
+    }
+  });
+  $('#importConfirmBtn').addEventListener('click',async()=>{
+    if(!pendingImportData||!pendingImportData.data.length) return;
+    const btn=$('#importConfirmBtn');
+    setLoading(btn,true);
+    try{
+      if(pendingImportData.type==='visits'){
+        for(const v of pendingImportData.data){
+          await addDoc(collection(db,'visits'),{date:v.date, sites:v.sites, createdBy:S.user.name, createdAt:serverTimestamp()});
+        }
+      } else {
+        const statusMap={'تم الانتهاء':'completed','جاري العمل':'in_progress'};
+        for(const t of pendingImportData.data){
+          await addDoc(collection(db,'tasks'),{
+            title:t.title, startDate:t.startDate, endDate:t.endDate, responsible:t.responsible,
+            status:statusMap[t.status]||'not_started', notes:t.notes,
+            createdBy:S.user.name, createdAt:serverTimestamp()
+          });
+        }
+      }
+      toast('تم الاستيراد بنجاح');
+      const w=$('#importOverlay'); if(w) w.remove();
+      pendingImportData=null;
+    }catch(err){
+      console.error(err);
+      setLoading(btn,false,'<span>'+icon('check')+' استيراد</span>');
+      toast('تعذر إتمام الاستيراد، تأكد من قواعد الأمان (Rules)',true);
+    }
+  });
+}
+function openImportModal(){
+  document.body.insertAdjacentHTML('beforeend', importModalHtml());
+  wireImportModal();
 }
 
 /* ============================================================
