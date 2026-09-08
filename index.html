@@ -577,7 +577,13 @@ onAuthStateChanged(auth, async (fbUser)=>{
         S.pendingLoginError='لا يوجد ملف موظف مرتبط بهذا الحساب، الرجاء التواصل مع المشرف';
         S.ready=true; go('login'); return;
       }
-    }catch(e){ console.error(e); S.ready=true; render(); return; }
+    }catch(e){
+      console.error('خطأ أثناء جلب ملف الموظف:', e.code||e.message||e);
+      S.user=null;
+      try{ await signOut(auth); }catch(e2){}
+      S.pendingLoginError='تعذر التحقق من صلاحيات الحساب — على الأغلب قواعد أمان Firestore غير محفوظة بعد ('+(e.code||e.message||'خطأ غير معروف')+')';
+      S.ready=true; go('login'); return;
+    }
   } else {
     S.user=null; clearSubs();
     S.employees=[];S.requests=[];S.visits=[];S.meetings=[];
