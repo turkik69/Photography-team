@@ -109,20 +109,25 @@ img{max-width:100%;display:block}
 /* ---------- Bottom nav (mobile) ---------- */
 .bottomnav{
   position:fixed;bottom:0;right:0;left:0;z-index:40;
-  background:#fff;border-top:1px solid var(--line);
-  padding:6px 6px calc(6px + env(safe-area-inset-bottom));
+  background:linear-gradient(180deg,var(--green-800),var(--green-950));
+  padding:9px 4px calc(9px + env(safe-area-inset-bottom));
   display:flex;justify-content:space-around;
-  box-shadow:0 -4px 16px rgba(11,59,46,.08);
+  box-shadow:0 -4px 18px rgba(6,30,23,.35);
 }
 @media(min-width:860px){.bottomnav{display:none}}
 .navitem{
-  display:flex;flex-direction:column;align-items:center;gap:3px;
+  display:flex;flex-direction:column;align-items:center;gap:4px;
   background:none;border:none;color:var(--ink-500);cursor:pointer;
-  padding:6px 10px;border-radius:var(--radius-s);flex:1;max-width:96px;
+  padding:6px 8px;border-radius:var(--radius-s);flex:1;max-width:96px;
 }
 .navitem svg{width:21px;height:21px}
 .navitem span{font-size:10.5px;font-weight:600}
 .navitem.active{color:var(--green-700)}
+.bottomnav .navitem{color:rgba(237,244,240,.65)}
+.bottomnav .navitem svg{width:25px;height:25px}
+.bottomnav .navitem span{font-size:11.5px;font-weight:700}
+.bottomnav .navitem.active{color:#fff;background:rgba(203,156,60,.28)}
+.bottomnav .navitem.active svg{color:var(--gold-500)}
 
 /* ---------- Side rail (tablet/desktop) ---------- */
 .with-rail{display:flex;max-width:var(--maxw);margin:0 auto;gap:0}
@@ -414,6 +419,7 @@ const S = {
   requests:[],
   visits:[],
   meetings:[],
+  tasks:[],
   ready:false,
   menuOpen:false,
   pendingLoginError:null,
@@ -450,6 +456,7 @@ const ICON = {
   eye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>',
   eyeoff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.9 17.9A10.7 10.7 0 0112 19c-7 0-11-7-11-7a19.4 19.4 0 015.1-5.6M9.9 4.2A9.7 9.7 0 0112 4c7 0 11 7 11 7a19.5 19.5 0 01-3 3.9M14.1 14.1a3 3 0 10-4.2-4.2"/><path d="M2 2l20 20"/></svg>',
   gauge:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14l3-4"/><circle cx="12" cy="14" r="1"/><path d="M4.9 19a9 9 0 1114.2 0"/><path d="M4 14H2M22 14h-2M6 8L4.5 6.5M18 8l1.5-1.5"/></svg>',
+  tasks:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>',
 };
 function icon(name,cls){return `<span class="ic ${cls||''}" style="display:inline-flex">${ICON[name]||''}</span>`}
 
@@ -548,6 +555,10 @@ function subscribeAll(){
     S.meetings=snap.docs.map(d=>({id:d.id,...d.data()}));
     render();
   },err=>console.error('meetings sub',err)));
+  unsubs.push(onSnapshot(query(collection(db,'tasks'),orderBy('startDate','desc')),snap=>{
+    S.tasks=snap.docs.map(d=>({id:d.id,...d.data()}));
+    render();
+  },err=>console.error('tasks sub',err)));
 }
 
 /* ---------------- حالة تسجيل الدخول ---------------- */
@@ -598,6 +609,7 @@ const NAV_ITEMS=[
   {key:'portal-dashboard',label:'الرئيسية',icon:'gauge'},
   {key:'portal-requests',label:'الطلبات',icon:'doc'},
   {key:'portal-visits',label:'الزيارات',icon:'pin'},
+  {key:'portal-tasks',label:'المهام',icon:'tasks'},
   {key:'portal-meetings',label:'الاجتماعات',icon:'users'},
 ];
 function initials(name){
@@ -633,6 +645,7 @@ function topbarHtml(){
           <button data-go="portal-employees">${icon('users')} إدارة الموظفين</button>
           <button data-go="portal-reports">${icon('gauge')} التقارير والأداء</button>
           <button id="backupBtn">${icon('doc')} نسخة احتياطية</button>
+          <button id="importBtn">${icon('tasks')} استيراد السجلات القديمة</button>
           `:''}
           <button data-go="portal-account">${icon('key')} تغيير كلمة المرور</button>
           <div class="menu-divider"></div>
@@ -693,6 +706,9 @@ function render(){
   else if(S.route==='portal-request-detail') inner=renderRequestDetail(S.routeParam);
   else if(S.route==='portal-visits') inner=renderVisitsList();
   else if(S.route==='portal-visit-add') inner=renderVisitAdd();
+  else if(S.route==='portal-tasks') inner=renderTasksList();
+  else if(S.route==='portal-task-add') inner=renderTaskAdd();
+  else if(S.route==='portal-task-detail') inner=renderTaskDetail(S.routeParam);
   else if(S.route==='portal-meetings') inner=renderMeetingsList();
   else if(S.route==='portal-meeting-add') inner=renderMeetingAdd();
   else if(S.route==='portal-meeting-detail') inner=renderMeetingDetail(S.routeParam);
@@ -716,12 +732,17 @@ function wireShellEvents(){
   if(lo) lo.addEventListener('click',async()=>{ await signOut(auth); toast('تم تسجيل الخروج'); });
   const bk=$('#backupBtn');
   if(bk) bk.addEventListener('click',runBackupExport);
+  const imp=$('#importBtn');
+  if(imp) imp.addEventListener('click',runHistoricalImport);
 }
 function wirePortalRoute(){
   if(S.route==='portal-requests') wireRequestsList();
   else if(S.route==='portal-request-detail') wireRequestDetail(S.routeParam);
   else if(S.route==='portal-visits') wireVisitsList();
   else if(S.route==='portal-visit-add') wireVisitAdd();
+  else if(S.route==='portal-tasks') wireTasksList();
+  else if(S.route==='portal-task-add') wireTaskAdd();
+  else if(S.route==='portal-task-detail') wireTaskDetail(S.routeParam);
   else if(S.route==='portal-meetings') wireMeetingsList();
   else if(S.route==='portal-meeting-add') wireMeetingAdd();
   else if(S.route==='portal-meeting-detail') wireMeetingDetail(S.routeParam);
@@ -1606,6 +1627,192 @@ function wireVisitAdd(){
       toast('تعذر حفظ الزيارة',true);
     }
   });
+}
+
+
+/* ============================================================
+   المهام والمشاريع (جدول الأعمال)
+   ============================================================ */
+function taskStatusLabel(s){ return {not_started:'لم يبدأ', in_progress:'جاري العمل', completed:'تم الانتهاء'}[s]||'لم يبدأ'; }
+function taskStatusBadgeClass(s){ return {not_started:'badge-prescheduled', in_progress:'badge-medium', completed:'badge-status-completed'}[s]||'badge-prescheduled'; }
+function taskListItemHtml(t){
+  const status=t.status||'not_started';
+  return `
+  <div class="list-item" data-task="${t.id}">
+    <div class="list-item-icon">${icon('tasks')}</div>
+    <div class="list-item-body">
+      <div class="list-item-title">${esc(t.title)}</div>
+      <div class="list-item-sub">
+        <span class="badge ${taskStatusBadgeClass(status)}">${taskStatusLabel(status)}</span>
+        ${t.startDate?`<span>${fmtDateShort(t.startDate)}${t.endDate?' - '+fmtDateShort(t.endDate):''}</span>`:''}
+      </div>
+      ${(t.responsible&&t.responsible.length)?`<div class="muted" style="margin-top:3px;font-size:11.5px">${esc(t.responsible.join('، '))}</div>`:''}
+    </div>
+    <div class="list-item-chev">${icon('chev')}</div>
+  </div>`;
+}
+function renderTasksList(){
+  const filter=S.filters.tasksStatus||'all';
+  let list=S.tasks.slice().sort((a,b)=>(b.startDate||'').localeCompare(a.startDate||''));
+  if(filter!=='all') list=list.filter(t=>(t.status||'not_started')===filter);
+  const chips=[['all','الكل'],['in_progress','جاري العمل'],['completed','تم الانتهاء'],['not_started','لم يبدأ']];
+  return `
+  <div class="section-title-row"><h2>المهام والمشاريع</h2>
+    <button class="btn btn-primary btn-sm" data-go="portal-task-add">${icon('plus')} إضافة مهمة</button>
+  </div>
+  <div class="chiprow">
+    ${chips.map(([k,l])=>`<button class="chip ${filter===k?'on':''}" data-tfilter="${k}">${l}</button>`).join('')}
+  </div>
+  <div class="section">
+    ${list.length===0?`<div class="empty-state">${icon('tasks')}<h3>لا توجد مهام مسجّلة</h3><p>أضيفي أول مهمة أو مشروع للفريق</p></div>`:
+      list.map(t=>taskListItemHtml(t)).join('')}
+  </div>`;
+}
+function wireTasksList(){
+  $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+  $all('[data-tfilter]').forEach(b=>b.addEventListener('click',()=>{S.filters.tasksStatus=b.dataset.tfilter;render();}));
+  $all('[data-task]').forEach(el=>el.addEventListener('click',()=>go('portal-task-detail',el.dataset.task)));
+}
+function taskStatusPillsHtml(current){
+  return `
+  <div class="radio-row">
+    <button type="button" class="radio-pill ${(!current||current==='not_started')?'on':''}" data-tstatus="not_started">لم يبدأ</button>
+    <button type="button" class="radio-pill ${current==='in_progress'?'on':''}" data-tstatus="in_progress">جاري العمل</button>
+    <button type="button" class="radio-pill ${current==='completed'?'on':''}" data-tstatus="completed">تم الانتهاء</button>
+  </div>
+  <input type="hidden" name="status" value="${current||'not_started'}">`;
+}
+function wireTaskStatusPills(){
+  $all('[data-tstatus]').forEach(b=>b.addEventListener('click',()=>{
+    $all('[data-tstatus]').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    $('input[name=status]').value=b.dataset.tstatus;
+  }));
+}
+function renderTaskAdd(){
+  return `
+  <button class="btn btn-ghost btn-sm" data-go="portal-tasks" style="margin-bottom:10px">${icon('chev')} رجوع</button>
+  <div class="section-title-row"><h2>إضافة مهمة</h2></div>
+  <form id="taskForm">
+    <div class="section"><div class="section-body">
+      <div class="field"><label>عنوان المهمة / المشروع</label><input class="input" name="title" required></div>
+      <div class="row2">
+        <div class="field"><label>تاريخ البدء</label><input class="input" type="date" name="startDate" value="${todayISO()}"></div>
+        <div class="field"><label>تاريخ الانتهاء (إن وُجد)</label><input class="input" type="date" name="endDate"></div>
+      </div>
+      <div class="field"><label>المسؤول عنه</label><input class="input" name="responsible" placeholder="أسماء مفصولة بفاصلة"></div>
+      <div class="field">
+        <label>الحالة</label>
+        ${taskStatusPillsHtml('in_progress')}
+      </div>
+      <div class="field" style="margin-bottom:0"><label>ملاحظات / تحديات</label><textarea class="input" name="notes"></textarea></div>
+    </div></div>
+    <button class="btn btn-primary btn-block" type="submit" style="padding:15px">${icon('check')} حفظ المهمة</button>
+  </form>`;
+}
+function wireTaskAdd(){
+  $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+  wireTaskStatusPills();
+  $('#taskForm').addEventListener('submit',async(e)=>{
+    e.preventDefault();
+    const btn=e.target.querySelector('[type=submit]');
+    const fd=new FormData(e.target);
+    const responsible=(fd.get('responsible')||'').split(/[,،]/).map(s=>s.trim()).filter(Boolean);
+    setLoading(btn,true);
+    try{
+      await addDoc(collection(db,'tasks'),{
+        title:fd.get('title')||'', startDate:fd.get('startDate')||'', endDate:fd.get('endDate')||'',
+        responsible, status:fd.get('status')||'in_progress', notes:fd.get('notes')||'',
+        createdBy:S.user.name, createdAt:serverTimestamp()
+      });
+      toast('تم حفظ المهمة بنجاح');
+      go('portal-tasks');
+    }catch(err){
+      console.error(err);
+      setLoading(btn,false,'<span>'+icon('check')+' حفظ المهمة</span>');
+      toast('تعذر حفظ المهمة',true);
+    }
+  });
+}
+function renderTaskDetail(id){
+  const t=S.tasks.find(x=>x.id===id);
+  if(!t) return `<div class="empty-state">${icon('alert')}<h3>المهمة غير موجودة</h3></div>`;
+  return `
+  <button class="btn btn-ghost btn-sm" data-go="portal-tasks" style="margin-bottom:10px">${icon('chev')} رجوع</button>
+  <div class="section"><div class="section-body">
+    <form id="taskEditForm">
+      <div class="field"><label>عنوان المهمة / المشروع</label><input class="input" name="title" value="${esc(t.title)}" required></div>
+      <div class="row2">
+        <div class="field"><label>تاريخ البدء</label><input class="input" type="date" name="startDate" value="${esc(t.startDate||'')}"></div>
+        <div class="field"><label>تاريخ الانتهاء</label><input class="input" type="date" name="endDate" value="${esc(t.endDate||'')}"></div>
+      </div>
+      <div class="field"><label>المسؤول عنه</label><input class="input" name="responsible" value="${esc((t.responsible||[]).join('، '))}" placeholder="أسماء مفصولة بفاصلة"></div>
+      <div class="field">
+        <label>الحالة</label>
+        ${taskStatusPillsHtml(t.status)}
+      </div>
+      <div class="field" style="margin-bottom:0"><label>ملاحظات / تحديات</label><textarea class="input" name="notes">${esc(t.notes||'')}</textarea></div>
+      <button class="btn btn-primary" type="submit" style="margin-top:14px">${icon('check')} حفظ التعديلات</button>
+    </form>
+  </div></div>`;
+}
+function wireTaskDetail(id){
+  $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+  wireTaskStatusPills();
+  const f=$('#taskEditForm');
+  if(f) f.addEventListener('submit',async(e)=>{
+    e.preventDefault();
+    const btn=e.target.querySelector('[type=submit]');
+    const fd=new FormData(f);
+    const responsible=(fd.get('responsible')||'').split(/[,،]/).map(s=>s.trim()).filter(Boolean);
+    setLoading(btn,true);
+    try{
+      await updateDoc(doc(db,'tasks',id),{
+        title:fd.get('title')||'', startDate:fd.get('startDate')||'', endDate:fd.get('endDate')||'',
+        responsible, status:fd.get('status')||'not_started', notes:fd.get('notes')||'',
+        updatedAt:serverTimestamp()
+      });
+      toast('تم حفظ التعديلات');
+      setLoading(btn,false,'<span>'+icon('check')+' حفظ التعديلات</span>');
+    }catch(err){ console.error(err); setLoading(btn,false,'<span>'+icon('check')+' حفظ التعديلات</span>'); toast('تعذر الحفظ',true); }
+  });
+}
+
+/* ============================================================
+   استيراد السجلات القديمة (جدول الأعمال + جدول الزيارات الأصليين)
+   بيانات ثابتة مستخرجة من ملفات Excel الأصلية مع تصحيح التواريخ
+   ============================================================ */
+const HISTORICAL_IMPORT_DATA = {"visits": [{"date": "2026-08-06", "sites": [{"taskType": "تقييم", "projectName": "وحدة التخزين", "location": "بلدية مسقط (مسقط)", "description": "تم انشاء تقرير مبدئي لتقييم الوضع الراهن في وحدة التخزين"}, {"taskType": "تصوير مراحل المشروع", "projectName": "مشروع متنزه السيفة", "location": "السيفة", "description": ""}, {"taskType": "تصوير مراحل المشروع", "projectName": "انشاء ممشى بندر الخيران", "location": "بندر الخيران", "description": ""}]}, {"date": "2026-08-10", "sites": [{"taskType": "تصوير مراحل المشروع", "projectName": "حماية جانبية للطريق", "location": "قنتب", "description": ""}, {"taskType": "تصوير مراحل المشروع", "projectName": "انشاء منتزه الراوية بمحافظة مسقط", "location": "مسقط", "description": ""}, {"taskType": "تصوير مراحل المشروع", "projectName": "صيانة الواجهة البحرية كورنيش مطرح", "location": "مطرح", "description": "تم إضافة الصور في الملف المشترك"}, {"taskType": "برنامج أثر", "projectName": "الكتابة على الجدران", "location": "مطرح", "description": "تم إضافة الصور في الملف المشترك"}, {"taskType": "تصوير مراحل المشروع", "projectName": "عمل الحمايات بنهاية مجرى وادي دارسيت", "location": "دارسيت", "description": ""}]}, {"date": "2026-08-12", "sites": [{"taskType": "تصوير مراحل المشروع", "projectName": "التشجير - مول مسقط", "location": "المعبيلة", "description": ""}, {"taskType": "تصوير مراحل المشروع", "projectName": "التشجير - الهبطة - وادي العرش", "location": "السيب", "description": "زيارة فقط"}, {"taskType": "تصوير مراحل المشروع", "projectName": "التشجير - مقابل قصر السيب", "location": "السيب", "description": ""}, {"taskType": "تصوير مراحل المشروع", "projectName": "التشجير - شارع البركات", "location": "السيب", "description": "زيارة فقط"}, {"taskType": "تصوير مراحل المشروع", "projectName": "متنزه", "location": "الخوض السابعة", "description": "تم الانتهاء من المشروع"}, {"taskType": "تصوير مراحل المشروع", "projectName": "مواقف السيارات - امام مكتب عادل الصبحي الاستشارات الهندسية", "location": "الخوض", "description": ""}, {"taskType": "تصوير مراحل المشروع", "projectName": "مقابل استراحة السهالة", "location": "المعبيلة", "description": ""}]}, {"date": "2026-08-13", "sites": [{"taskType": "تصوير مراحل المشروع", "projectName": "تطوير الحي السكني", "location": "الوادي الكبير", "description": "تم إضافة الصور في الملف المشترك"}]}, {"date": "2026-08-16", "sites": [{"taskType": "تصوير المبنى", "projectName": "حدائق الصحوة", "location": "السيب", "description": "تم إضافة الصور في الملف المشترك"}, {"taskType": "برنامج أثر", "projectName": "المرادم العشوائية", "location": "شارع مرتفعات المطار", "description": "تم إضافة الصور في الملف المشترك"}, {"taskType": "تصوير مراحل المشروع", "projectName": "مشروع انشاء شارع", "location": "بوشر", "description": "تم إضافة الصور في الملف المشترك"}, {"taskType": "تصوير مراحل المشروع", "projectName": "حديقة بوشر الشعبية", "location": "بوشر", "description": "تم إضافة الصور في الملف المشترك"}]}, {"date": "2026-08-18", "sites": [{"taskType": "أخرى", "projectName": "الغرض : تحديث الخرائط", "location": "الخوير", "description": "طلب من عائشة GIS - تم التسليم الى الفاضلة سامية"}, {"taskType": "تصوير مراحل المشروع", "projectName": "مشروع شارع", "location": "بوشر", "description": "طلب من الدكتور ناصر - المتابعة مع الفاضل مصعب"}, {"taskType": "تصوير", "projectName": "بيت البرندة", "location": "مطرح", "description": "طلب من المهندس هيثم البحراني (تم إضافة الصور في الملف المشترك)"}]}, {"date": "2026-08-20", "sites": [{"taskType": "تصوير مراحل المشروع", "projectName": "ممشى - المسفاة", "location": "قريات", "description": ""}, {"taskType": "تصوير", "projectName": "مبنى المديرية العامة بلدية مسقط - قريات", "location": "قريات", "description": "طلب من إدارة المبنى - بدر"}]}, {"date": "2026-08-23", "sites": [{"taskType": "تصوير مراحل المشروع", "projectName": "وادي البط", "location": "العامرات", "description": "تم التصوير قبل الانشاء (ممشى + العاب أطفال)"}, {"taskType": "تصوير مراحل المشروع", "projectName": "الجبل الأسود - صياء", "location": "السرين", "description": "اعمال تجميل وتطوير الحي السكني"}]}, {"date": "2026-08-25", "sites": [{"taskType": "تصوير", "projectName": "مبنى المديرية العامة بلدية مسقط - العامرات", "location": "العامرات", "description": "طلب من إدارة المبنى - بدر"}, {"taskType": "تصوير مراحل المشروع", "projectName": "ممشى شارع النهضة", "location": "العامرات", "description": "بريد الكتروني - علياء العبري  - الملف المشترك"}, {"taskType": "تصوير مراحل المشروع", "projectName": "صيانة الطرق العامرات - الحاجر", "location": "العامرات", "description": "بريد الكتروني - علياء العبري - الملف المشترك"}, {"taskType": "تصوير مراحل المشروع", "projectName": "تصميم وانشاء طرق داخلية - العتكية", "location": "العامرات", "description": "بريد الكتروني - علياء العبري - الملف المشترك"}, {"taskType": "تصوير مراحل المشروع", "projectName": "تجهيز ارضيات - انشاء شارع - العتكية", "location": "العامرات", "description": "بريد الكتروني - علياء العبري - الملف المشترك"}, {"taskType": "تصوير مراحل المشروع", "projectName": "الربط بين شارع العامرات وشارع الجود (المرحلة الأولى)", "location": "العامرات", "description": "بريد الكتروني - علياء العبري - الملف المشترك"}]}, {"date": "2026-08-30", "sites": [{"taskType": "تصوير مراحل المشروع", "projectName": "انشاء شارع الانصب", "location": "بوشر", "description": "طلب من محافظة مسقط - محبوبة"}]}, {"date": "2026-09-01", "sites": [{"taskType": "تصوير مراحل المشروع", "projectName": "سد وادي ضيقة", "location": "قريات", "description": ""}, {"taskType": "تصوير مراحل المشروع", "projectName": "صيانة شارع", "location": "مدينة الاعلام", "description": "طلب من الفاضل مصعب - مديرية بوشر"}]}, {"date": "2026-09-02", "sites": [{"taskType": "تصوير", "projectName": "حديقة اليوبيل الذهبي", "location": "السيب", "description": "بريد الكتروني - علياء العبري - الملف المشترك"}]}, {"date": "2026-09-03", "sites": [{"taskType": "تصوير", "projectName": "توثيق -  عملية التنظيف", "location": "مسقط - جبا", "description": "مديرية مسقط"}, {"taskType": "أخرى", "projectName": "دراسة عمل ملاعب رياضية", "location": "شاطي القرم", "description": "مديرية يوشر - محمد بهرام - زيارة فقط"}]}, {"date": "2026-09-06", "sites": [{"taskType": "تصوير", "projectName": "توثيق -  جبا عملية التنظيف", "location": "مسقط - جبا", "description": "مديرية مسقط"}, {"taskType": "تصوير", "projectName": "مرادم عشوائية", "location": "يتي", "description": "مديرية مسقط"}, {"taskType": "مسابقة", "projectName": "استلام كاميرات فورية", "location": "محافظة مسقط", "description": "تصوير فوري كاميرات كوداك"}]}, {"date": "2026-09-07", "sites": [{"taskType": "تصوير", "projectName": "توثيق -  جبا عملية التنظيف", "location": "مسقط - جبا", "description": "مديرية مسقط"}]}], "tasks": [{"title": "استمارة طلب خدمة تصوير", "startDate": "2026-08-06", "endDate": "2026-08-09", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "تم الانتهاء", "notes": ""}, {"title": "انشاء تقرير تفصيلي للمعدات في وحدة التخزين (مسقط)", "startDate": "2026-08-06", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "جاري العمل", "notes": ""}, {"title": "تصوير مراحل المشاريع (يوجد تقرير تفصيلي للزيارات)", "startDate": "2026-08-06", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "جاري العمل", "notes": "تقرير تفصيلي للزيارات  / ملفات الصور في الملف المشترك"}, {"title": "برنامج (أثر)", "startDate": "2026-07-28", "endDate": "", "responsible": ["حنان النبهاني", "وفاء الوهيبي", "فيصل"], "status": "جاري العمل", "notes": "تم تصوير ومونتاج 6 فيديوات"}, {"title": "انشاء بريد الكتروني حاص بفريق التصوير", "startDate": "2026-08-12", "endDate": "", "responsible": ["فريق التصوير"], "status": "تم الانتهاء", "notes": ""}, {"title": "تطبيق العمل على استمارة طلب خدمة تصوير", "startDate": "2026-08-12", "endDate": "", "responsible": ["فريق التصوير"], "status": "تم الانتهاء", "notes": ""}, {"title": "انشاء دليل خدمات فريق التصوير", "startDate": "2026-08-10", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "تم الانتهاء", "notes": "تم اعداد عدد 3 خدمات - قابل للتحديث  (الملف المشترك) غير معتمد"}, {"title": "انشاء استديو تصوير (كروما)", "startDate": "2026-08-16", "endDate": "", "responsible": ["عادل البحراني"], "status": "جاري العمل", "notes": ""}, {"title": "طلب ملف رقمي لصور المشاريع في مسثط", "startDate": "2026-08-12", "endDate": "2026-08-18", "responsible": ["حنان النبهاني"], "status": "تم الانتهاء", "notes": "طلب من محافظة مسقط - يوجد بريد الكتروني  - تم تسليم الملف الى المصور لؤي"}, {"title": "تصوير فعالية (معا من اجل شاطي انظف)", "startDate": "2026-08-17", "endDate": "2026-08-17", "responsible": ["حنان النبهاني"], "status": "تم الانتهاء", "notes": "يوجد رابط للصور وتم تسليمه للمستفيد"}, {"title": "تصوير جلسة حوارية شبابية (محافظة مسقط)", "startDate": "2026-08-19", "endDate": "2026-08-19", "responsible": ["وفاء الوهيبي", "عمار الرئيسي"], "status": "تم الانتهاء", "notes": "فندق انترستي - الفترة بين 4 - 9 مساء"}, {"title": "صور جمالية  ل مسقط Open Data", "startDate": "", "endDate": "", "responsible": ["فريق التصوير"], "status": "", "notes": "الموقع الالكتروني بلدية مسقط Open data"}, {"title": "انشاء مكتبة رقمية للتوثيق", "startDate": "2026-08-06", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "", "notes": ""}, {"title": "احصائيات (نشرة)", "startDate": "2026-08-24", "endDate": "2026-08-26", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "تم الانتهاء", "notes": ""}, {"title": "فيديو تعريفي GIS", "startDate": "", "endDate": "", "responsible": [], "status": "", "notes": "طلب من الفاضلة هدى العفيفي (التفاصيل في البريد الالكتروني) 23/08/2026"}, {"title": "مونتاج صور مركبات شاطئية", "startDate": "2026-08-23", "endDate": "2026-08-24", "responsible": ["عادل البحراني"], "status": "تم الانتهاء", "notes": "طلب من الفاضل عبدالله المقبالي (النقليات) النبذة التعريفية في البريد الالكتروني"}, {"title": "حصر الأدوات والمعدات الخاصة بفريق التصوير", "startDate": "2026-08-24", "endDate": "", "responsible": ["وفاء الوهيبي"], "status": "تم الانتهاء", "notes": "تم النقل التقرير الى الملف المشترك"}, {"title": "فعالية وثقها لتبقى", "startDate": "", "endDate": "", "responsible": [], "status": "", "notes": ""}, {"title": "نسخ المقاطع من الأقراص المرنة الى الملف المشترك", "startDate": "", "endDate": "", "responsible": [], "status": "", "notes": "لا تتوفر أجهزة DVD writer"}, {"title": "منح صلاحية الوصول الى الملف المشترك للمديريات", "startDate": "2026-08-26", "endDate": "", "responsible": ["عادل البحراني"], "status": "", "notes": "view only"}, {"title": "موضوع بيت البرندة", "startDate": "", "endDate": "", "responsible": ["عادل البحراني"], "status": "", "notes": "زيارة وتصوير  - للمناقشة مع الفاضلة عائشة السيابي"}, {"title": "فعالية وعينا يجمعنا", "startDate": "2026-08-29", "endDate": "2026-08-29", "responsible": ["حنان النبهاني", "وفاء الوهيبي"], "status": "تم الانتهاء", "notes": "إدارة الفعاليات والتوعية  - الملف المشترك صور فقط"}, {"title": "تصوير مكتب الرئيس", "startDate": "2026-08-30", "endDate": "2026-08-30", "responsible": ["حنان النبهاني", "وفاء الوهيبي"], "status": "تم الانتهاء", "notes": "طلب من مكتب الرئيس  (أحمد الهنائي)"}, {"title": "نشرة شهرية للتغطيات والزيارات", "startDate": "2026-08-26", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "تم الانتهاء", "notes": "تم ارسال بريد الكتروني (قريق التصوير + م/ هيثم البحراني)"}, {"title": "توثيق اعمال تنظيف المساحات في يتي - جبا", "startDate": "2026-09-03", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "جاري العمل", "notes": "مديرية مسقط"}, {"title": "عمل تصور - مبنى بيت البرندة - ذاكرة مسقط", "startDate": "2026-09-06", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "جاري العمل", "notes": "مبنى بيت البرندة - عرض مرئي"}, {"title": "مسابقة محافظة مسقط للتصوير الفوري", "startDate": "2026-09-06", "endDate": "2026-09-13", "responsible": ["فريق التصوير"], "status": "جاري العمل", "notes": "محافظة مسقط - التنسيق مع لؤي"}, {"title": "طلب تصوير وقوقف الشاحنات في الاحياء السكنية", "startDate": "2026-09-07", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "جاري العمل", "notes": "طلب من المهندس هيثم البحراني -  ملفات الصور في الملف المشترك"}, {"title": "طلب تصوير السيارات الخردة", "startDate": "2026-09-07", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "جاري العمل", "notes": "طلب من المهندس هيثم البحراني -  ملفات الصور في الملف المشترك"}, {"title": "تصميم ملزقات شعار البلدية", "startDate": "2026-09-07", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "جاري العمل", "notes": "انشاء فيلم (تنظيف الجزر)"}, {"title": "تصميم كتاب مسقط", "startDate": "2026-09-07", "endDate": "", "responsible": ["عادل البحراني", "فاطمة الوهيبي"], "status": "جاري العمل", "notes": "تصميم الغلاف"}]}
+;
+async function runHistoricalImport(){
+  const nV=HISTORICAL_IMPORT_DATA.visits.length, nT=HISTORICAL_IMPORT_DATA.tasks.length;
+  if(!confirm(`سيتم استيراد ${nV} زيارة (بإجمالي ${HISTORICAL_IMPORT_DATA.visits.reduce((s,v)=>s+v.sites.length,0)} موقع) و${nT} مهمة من السجلات السابقة. هل تريدين المتابعة؟`)) return;
+  try{
+    const metaRef=doc(db,'meta','dataImport');
+    const metaSnap=await getDoc(metaRef);
+    if(metaSnap.exists() && metaSnap.data().done){
+      if(!confirm('يبدو أن الاستيراد تم تنفيذه من قبل بهذا التاريخ: '+(metaSnap.data().importedAtLabel||'')+'. تنفيذه مرة أخرى سينشئ نسخاً مكررة من نفس البيانات. متابعة؟')) return;
+    }
+    toast('جاري الاستيراد، الرجاء الانتظار...');
+    for(const v of HISTORICAL_IMPORT_DATA.visits){
+      await addDoc(collection(db,'visits'),{
+        date:v.date, sites:v.sites, createdBy:S.user.name, createdAt:serverTimestamp(), importedFromLegacy:true
+      });
+    }
+    const statusMap={'تم الانتهاء':'completed','جاري العمل':'in_progress'};
+    for(const t of HISTORICAL_IMPORT_DATA.tasks){
+      await addDoc(collection(db,'tasks'),{
+        title:t.title, startDate:t.startDate, endDate:t.endDate, responsible:t.responsible,
+        status: statusMap[t.status]||'not_started', notes:t.notes,
+        createdBy:S.user.name, createdAt:serverTimestamp(), importedFromLegacy:true
+      });
+    }
+    await setDoc(metaRef,{done:true, importedAt:serverTimestamp(), importedAtLabel:fmtDate(todayISO()), importedBy:S.user.name});
+    toast('تم استيراد السجلات القديمة بنجاح');
+  }catch(err){
+    console.error(err);
+    toast('تعذر إتمام الاستيراد، تأكدي من قواعد الأمان (Rules) وحاولي مرة أخرى',true);
+  }
 }
 
 /* ============================================================
