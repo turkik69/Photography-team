@@ -77,7 +77,6 @@ img{max-width:100%;display:block}
 .screen{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
 .container{width:100%;max-width:var(--maxw);margin:0 auto;padding:0 16px}
 .portal-main{flex:1;padding:18px 0 96px;width:100%}
-@media(min-width:720px){.portal-main{padding-bottom:32px}}
 
 /* ---------- Topbar ---------- */
 .topbar{
@@ -111,14 +110,14 @@ img{max-width:100%;display:block}
   position:fixed;bottom:0;right:0;left:0;z-index:40;
   background:linear-gradient(180deg,var(--green-800),var(--green-950));
   padding:9px 4px calc(9px + env(safe-area-inset-bottom));
-  display:flex;justify-content:space-around;
+  display:flex;justify-content:center;gap:4px;
   box-shadow:0 -4px 18px rgba(6,30,23,.35);
 }
-@media(min-width:860px){.bottomnav{display:none}}
+.bottomnav-inner{display:flex;justify-content:space-around;width:100%;max-width:var(--maxw)}
 .navitem{
   display:flex;flex-direction:column;align-items:center;gap:4px;
   background:none;border:none;color:var(--ink-500);cursor:pointer;
-  padding:6px 8px;border-radius:var(--radius-s);flex:1;max-width:96px;
+  padding:6px 8px;border-radius:var(--radius-s);flex:1;max-width:110px;
 }
 .navitem svg{width:21px;height:21px}
 .navitem span{font-size:10.5px;font-weight:600}
@@ -128,18 +127,6 @@ img{max-width:100%;display:block}
 .bottomnav .navitem span{font-size:11.5px;font-weight:700}
 .bottomnav .navitem.active{color:#fff;background:rgba(203,156,60,.28)}
 .bottomnav .navitem.active svg{color:var(--gold-500)}
-
-/* ---------- Side rail (tablet/desktop) ---------- */
-.with-rail{display:flex;max-width:var(--maxw);margin:0 auto;gap:0}
-.rail{display:none}
-@media(min-width:860px){
-  .rail{
-    display:flex;flex-direction:column;gap:2px;width:196px;flex:none;
-    padding:18px 10px;
-  }
-  .rail .navitem{flex-direction:row;justify-content:flex-start;max-width:none;padding:10px 12px}
-  .rail-content{flex:1;min-width:0;padding-right:8px}
-}
 
 /* ---------- Buttons ---------- */
 .btn{
@@ -355,9 +342,8 @@ textarea.input{resize:vertical;min-height:78px}
 /* ---------- Print (reports) ---------- */
 .print-header{display:none}
 @media print{
-  .topbar,.bottomnav,.rail,.no-print,.fab{display:none!important}
+  .topbar,.bottomnav,.no-print,.fab{display:none!important}
   body{background:#fff}
-  .rail-content{padding:0!important}
   .print-header{
     display:flex!important;align-items:center;gap:12px;margin-bottom:16px;
     padding-bottom:12px;border-bottom:2px solid var(--green-800);
@@ -661,35 +647,17 @@ function topbarHtml(){
   </div>`;
 }
 function bottomNavHtml(){
-  return `<div class="bottomnav">
+  return `<div class="bottomnav"><div class="bottomnav-inner">
     ${NAV_ITEMS.map(it=>`
       <button class="navitem ${S.route===it.key?'active':''}" data-go="${it.key}">
         ${icon(it.icon)}<span>${it.label}</span>
       </button>`).join('')}
-  </div>`;
-}
-function railHtml(){
-  return `<div class="rail">
-    ${NAV_ITEMS.map(it=>`
-      <button class="navitem ${S.route===it.key?'active':''}" data-go="${it.key}" style="border-radius:10px">
-        ${icon(it.icon)}<span>${it.label}</span>
-      </button>`).join('')}
-    <div class="divider"></div>
-    ${S.user&&S.user.role==='lead'?`
-      <button class="navitem ${S.route==='portal-employees'?'active':''}" data-go="portal-employees">${icon('users')}<span>الموظفون</span></button>
-      <button class="navitem ${S.route==='portal-reports'?'active':''}" data-go="portal-reports">${icon('gauge')}<span>التقارير</span></button>
-    `:''}
-  </div>`;
+  </div></div>`;
 }
 function portalShell(innerHtml){
   return `
   ${topbarHtml()}
-  <div class="with-rail">
-    ${railHtml()}
-    <div class="rail-content">
-      <main class="portal-main"><div class="container" style="max-width:none;padding:0 16px">${innerHtml}</div></main>
-    </div>
-  </div>
+  <main class="portal-main"><div class="container">${innerHtml}</div></main>
   ${bottomNavHtml()}`;
 }
 
@@ -728,7 +696,7 @@ function render(){
   wirePortalRoute();
 }
 function wireShellEvents(){
-  $all('.topbar [data-go], .bottomnav [data-go], .rail [data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+  $all('.topbar [data-go], .bottomnav [data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   const av=$('#avatarBtn');
   if(av) av.addEventListener('click',(e)=>{e.stopPropagation();S.menuOpen=!S.menuOpen;render();});
   document.addEventListener('click',(e)=>{
@@ -795,12 +763,12 @@ function landingBodyLoginHtml(err){
   <form id="loginForm">
     <div class="field">
       <label>الرقم الوظيفي</label>
-      <input class="input" name="empNo" type="text" inputmode="numeric" placeholder="مثال: 12345" required>
+      <input class="input" name="empNo" type="text" inputmode="numeric" autocomplete="off" required>
     </div>
     <div class="field">
       <label>الرقم السري</label>
       <div style="position:relative">
-        <input class="input" name="password" type="password" id="loginPass" placeholder="••••••••" required style="padding-left:42px">
+        <input class="input" name="password" type="password" id="loginPass" autocomplete="off" required style="padding-left:42px">
         <button type="button" id="togglePass" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--ink-300);cursor:pointer;padding:4px">${icon('eye')}</button>
       </div>
     </div>
