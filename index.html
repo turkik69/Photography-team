@@ -2186,13 +2186,16 @@ function renderEmployees(){
             <span class="badge badge-role-${e.role}">${e.role==='lead'?'مشرف':'عضو الفريق'}</span>
             <span>${esc(e.employeeNumber)}</span>
             ${e.jobTitle?`<span>· ${esc(e.jobTitle)}</span>`:''}
+            ${e.capacity?`<span>· ${esc(e.capacity)}</span>`:''}
           </div>
         </div>
+        <button class="btn btn-ghost btn-sm" data-edit-emp="${e.id}">${icon('edit')}</button>
         <button class="btn btn-ghost btn-sm" data-toggle-emp="${e.id}">${e.active===false?'تفعيل':'تعطيل'}</button>
         ${e.id!==S.user.id?`<button class="btn btn-danger btn-sm" data-delete-emp="${e.id}" style="margin-right:6px">${icon('trash')}</button>`:''}
       </div>`).join('')}
   </div>
   <div id="addEmpModalWrap"></div>
+  <div id="editEmpModalWrap"></div>
   `;
 }
 function addEmployeeModalHtml(){
@@ -2206,6 +2209,7 @@ function addEmployeeModalHtml(){
           <div class="field"><label>الاسم الثلاثي</label><input class="input" name="name" required></div>
         </div>
         <div class="field"><label>الوظيفة</label><input class="input" name="jobTitle" placeholder="مثال: مصور فوتوغرافي"></div>
+        <div class="field"><label>الصفة</label><input class="input" name="capacity"></div>
         <div class="field">
           <label>الصلاحية</label>
           <div class="radio-row">
@@ -2224,12 +2228,43 @@ function addEmployeeModalHtml(){
     </div>
   </div>`;
 }
+function editEmployeeModalHtml(emp){
+  return `
+  <div class="overlay" id="editEmpOverlay">
+    <div class="sheet">
+      <div class="sheet-head"><h3>تعديل بيانات الموظف</h3><button class="sheet-close" id="closeEditEmp">${icon('x')}</button></div>
+      <form id="editEmpForm">
+        <div class="field"><label>الرقم الوظيفي</label><input class="input" value="${esc(emp.employeeNumber)}" disabled style="opacity:.6"></div>
+        <div class="field"><label>الاسم الثلاثي</label><input class="input" name="name" value="${esc(emp.name||'')}" required></div>
+        <div class="row2">
+          <div class="field"><label>الوظيفة</label><input class="input" name="jobTitle" value="${esc(emp.jobTitle||'')}"></div>
+          <div class="field"><label>الصفة</label><input class="input" name="capacity" value="${esc(emp.capacity||'')}"></div>
+        </div>
+        <div class="field">
+          <label>الصلاحية</label>
+          <div class="radio-row">
+            <button type="button" class="radio-pill ${emp.role!=='lead'?'on':''}" data-erole="member">عضو فريق</button>
+            <button type="button" class="radio-pill ${emp.role==='lead'?'on':''}" data-erole="lead">مشرف</button>
+          </div>
+          <input type="hidden" name="role" value="${emp.role==='lead'?'lead':'member'}">
+        </div>
+        <button class="btn btn-primary btn-block" type="submit" id="editEmpSubmitBtn" style="margin-top:6px">${icon('check')} حفظ التعديلات</button>
+      </form>
+    </div>
+  </div>`;
+}
 function wireEmployees(){
   const openBtn=$('#openAddEmpBtn');
   if(openBtn) openBtn.addEventListener('click',()=>{
     $('#addEmpModalWrap').innerHTML=addEmployeeModalHtml();
     wireAddEmpModal();
   });
+  $all('[data-edit-emp]').forEach(b=>b.addEventListener('click',()=>{
+    const emp=S.employees.find(x=>x.id===b.dataset.editEmp);
+    if(!emp) return;
+    $('#editEmpModalWrap').innerHTML=editEmployeeModalHtml(emp);
+    wireEditEmpModal(emp);
+  }));
   $all('[data-toggle-emp]').forEach(b=>b.addEventListener('click',async()=>{
     const emp=S.employees.find(x=>x.id===b.dataset.toggleEmp);
     if(!emp) return;
@@ -2247,6 +2282,34 @@ function wireEmployees(){
       toast('تم حذف الموظف');
     }catch(err){ console.error(err); toast('تعذر حذف الموظف',true); }
   }));
+}
+function wireEditEmpModal(emp){
+  const ov=$('#editEmpOverlay');
+  $('#closeEditEmp').addEventListener('click',()=>ov.remove());
+  ov.addEventListener('click',(e)=>{ if(e.target===ov) ov.remove(); });
+  $all('[data-erole]').forEach(b=>b.addEventListener('click',()=>{
+    $all('[data-erole]').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    $('#editEmpForm input[name=role]').value=b.dataset.erole;
+  }));
+  $('#editEmpForm').addEventListener('submit',async(e)=>{
+    e.preventDefault();
+    const fd=new FormData(e.target);
+    const btn=$('#editEmpSubmitBtn');
+    setLoading(btn,true);
+    try{
+      await updateDoc(doc(db,'employees',emp.id),{
+        name:(fd.get('name')||'').trim(), jobTitle:(fd.get('jobTitle')||'').trim(),
+        capacity:(fd.get('capacity')||'').trim(), role:fd.get('role')||'member'
+      });
+      toast('تم حفظ التعديلات بنجاح');
+      const w=$('#editEmpOverlay'); if(w) w.remove();
+    }catch(err){
+      console.error(err);
+      setLoading(btn,false,'<span>'+icon('check')+' حفظ التعديلات</span>');
+      toast('تعذر الحفظ',true);
+    }
+  });
 }
 const DEFAULT_EMP_PASSWORD='123456';
 function wireAddEmpModal(){
@@ -2275,7 +2338,7 @@ function wireAddEmpModal(){
       const cred=await createUserWithEmailAndPassword(secondaryAuth, empNo+AUTH_DOMAIN_SUFFIX, DEFAULT_EMP_PASSWORD);
       const newUid=cred.user.uid;
       await setDoc(doc(db,'employees',newUid),{
-        name:fd.get('name')||'', employeeNumber:empNo, jobTitle:fd.get('jobTitle')||'',
+        name:fd.get('name')||'', employeeNumber:empNo, jobTitle:fd.get('jobTitle')||'', capacity:fd.get('capacity')||'',
         directorate:'دائرة الفعاليات والتوعية',
         role:fd.get('role')||'member', active:true, mustChangePassword:true, createdAt:serverTimestamp()
       });
@@ -2485,6 +2548,7 @@ function renderAccount(){
       <form id="profileForm">
         <div class="field"><label>الاسم الثلاثي</label><input class="input" name="name" value="${esc(S.user.name||'')}" required></div>
         <div class="field"><label>المسمى الوظيفي</label><input class="input" name="jobTitle" value="${esc(S.user.jobTitle||'')}" placeholder="مثال: مصور فوتوغرافي"></div>
+        <div class="field"><label>الصفة</label><input class="input" name="capacity" value="${esc(S.user.capacity||'')}"></div>
         <div class="kv"><span class="k">الرقم الوظيفي</span><span class="v">${esc(S.user.employeeNumber)}</span></div>
         <div class="kv" style="margin-bottom:14px"><span class="k">الصلاحية</span><span class="v">${S.user.role==='lead'?'مشرف':'عضو الفريق'}</span></div>
         <button class="btn btn-primary" type="submit">${icon('check')} حفظ البيانات</button>
@@ -2511,11 +2575,11 @@ function wireAccount(){
     e.preventDefault();
     const fd=new FormData(e.target);
     const btn=e.target.querySelector('[type=submit]');
-    const newName=(fd.get('name')||'').trim(), newJobTitle=(fd.get('jobTitle')||'').trim();
+    const newName=(fd.get('name')||'').trim(), newJobTitle=(fd.get('jobTitle')||'').trim(), newCapacity=(fd.get('capacity')||'').trim();
     setLoading(btn,true);
     try{
-      await updateDoc(doc(db,'employees',S.user.id),{name:newName, jobTitle:newJobTitle});
-      S.user.name=newName; S.user.jobTitle=newJobTitle;
+      await updateDoc(doc(db,'employees',S.user.id),{name:newName, jobTitle:newJobTitle, capacity:newCapacity});
+      S.user.name=newName; S.user.jobTitle=newJobTitle; S.user.capacity=newCapacity;
       toast('تم حفظ البيانات بنجاح');
       setLoading(btn,false,'<span>'+icon('check')+' حفظ البيانات</span>');
       render();
