@@ -249,6 +249,19 @@ textarea.input{resize:vertical;min-height:78px}
 .list-item-chev{color:var(--ink-300);flex:none;margin-top:8px}
 .list-item-chev svg{width:16px;height:16px}
 .empty-state{padding:44px 20px;text-align:center;color:var(--ink-500)}
+
+/* ---------- Task cards (responsive grid) ---------- */
+.task-grid{display:flex;flex-direction:column;gap:10px}
+@media(min-width:640px){.task-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}}
+@media(min-width:960px){.task-grid{grid-template-columns:repeat(3,1fr)}}
+.task-card{
+  background:#fff;border:1px solid var(--line);border-radius:var(--radius-m);
+  padding:13px 15px;box-shadow:var(--shadow-1);cursor:pointer;
+}
+.task-card:active{background:var(--paper-50)}
+.task-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.task-card-title{font-size:13.5px;font-weight:700;color:var(--ink-900);line-height:1.45}
+.task-card-resp{font-size:11px;color:var(--ink-500);margin-top:6px}
 .empty-state svg{width:44px;height:44px;color:var(--line-strong);margin:0 auto 12px}
 .empty-state h3{font-size:15px;color:var(--ink-700);margin-bottom:6px}
 .empty-state p{font-size:13px;line-height:1.6}
@@ -1640,17 +1653,13 @@ function taskStatusBadgeClass(s){ return {not_started:'badge-prescheduled', in_p
 function taskListItemHtml(t){
   const status=t.status||'not_started';
   return `
-  <div class="list-item" data-task="${t.id}">
-    <div class="list-item-icon">${icon('tasks')}</div>
-    <div class="list-item-body">
-      <div class="list-item-title">${esc(t.title)}</div>
-      <div class="list-item-sub">
-        <span class="badge ${taskStatusBadgeClass(status)}">${taskStatusLabel(status)}</span>
-        ${t.startDate?`<span>${fmtDateShort(t.startDate)}${t.endDate?' - '+fmtDateShort(t.endDate):''}</span>`:''}
-      </div>
-      ${(t.responsible&&t.responsible.length)?`<div class="muted" style="margin-top:3px;font-size:11.5px">${esc(t.responsible.join('، '))}</div>`:''}
+  <div class="task-card" data-task="${t.id}">
+    <div class="task-card-top">
+      <span class="badge ${taskStatusBadgeClass(status)}">${taskStatusLabel(status)}</span>
+      ${t.startDate?`<span class="muted" style="font-size:11px">${fmtDateShort(t.startDate)}${t.endDate?' - '+fmtDateShort(t.endDate):''}</span>`:''}
     </div>
-    <div class="list-item-chev">${icon('chev')}</div>
+    <div class="task-card-title">${esc(t.title)}</div>
+    ${(t.responsible&&t.responsible.length)?`<div class="task-card-resp">${esc(t.responsible.join('، '))}</div>`:''}
   </div>`;
 }
 function renderTasksList(){
@@ -1665,10 +1674,8 @@ function renderTasksList(){
   <div class="chiprow">
     ${chips.map(([k,l])=>`<button class="chip ${filter===k?'on':''}" data-tfilter="${k}">${l}</button>`).join('')}
   </div>
-  <div class="section">
-    ${list.length===0?`<div class="empty-state">${icon('tasks')}<h3>لا توجد مهام مسجّلة</h3><p>يمكن إضافة أول مهمة أو مشروع للفريق</p></div>`:
-      list.map(t=>taskListItemHtml(t)).join('')}
-  </div>`;
+  ${list.length===0?`<div class="section"><div class="empty-state">${icon('tasks')}<h3>لا توجد مهام مسجّلة</h3><p>يمكن إضافة أول مهمة أو مشروع للفريق</p></div></div>`:
+    `<div class="task-grid">${list.map(t=>taskListItemHtml(t)).join('')}</div>`}`;
 }
 function wireTasksList(){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
@@ -2472,11 +2479,18 @@ function renderAccount(){
       <p style="font-size:13px;line-height:1.7;color:var(--ink-700)">حسابك يستخدم الرقم السري الافتراضي، الرجاء تغييره الآن قبل المتابعة</p>
     </div>
   </div>`:''}
-  <div class="section" style="margin-bottom:14px"><div class="section-body">
-    <div class="kv"><span class="k">الاسم</span><span class="v">${esc(S.user.name)}</span></div>
-    <div class="kv"><span class="k">الرقم الوظيفي</span><span class="v">${esc(S.user.employeeNumber)}</span></div>
-    <div class="kv"><span class="k">الصلاحية</span><span class="v">${S.user.role==='lead'?'مشرف':'عضو الفريق'}</span></div>
-  </div></div>
+  <div class="section" style="margin-bottom:14px">
+    <div class="section-head">${icon('id')} البيانات الشخصية</div>
+    <div class="section-body">
+      <form id="profileForm">
+        <div class="field"><label>الاسم الثلاثي</label><input class="input" name="name" value="${esc(S.user.name||'')}" required></div>
+        <div class="field"><label>المسمى الوظيفي</label><input class="input" name="jobTitle" value="${esc(S.user.jobTitle||'')}" placeholder="مثال: مصور فوتوغرافي"></div>
+        <div class="kv"><span class="k">الرقم الوظيفي</span><span class="v">${esc(S.user.employeeNumber)}</span></div>
+        <div class="kv" style="margin-bottom:14px"><span class="k">الصلاحية</span><span class="v">${S.user.role==='lead'?'مشرف':'عضو الفريق'}</span></div>
+        <button class="btn btn-primary" type="submit">${icon('check')} حفظ البيانات</button>
+      </form>
+    </div>
+  </div>
   <div class="section"><div class="section-head">${icon('key')} تغيير الرقم السري</div>
     <div class="section-body">
       <form id="pwForm">
@@ -2493,6 +2507,24 @@ function renderAccount(){
   </div>`;
 }
 function wireAccount(){
+  $('#profileForm').addEventListener('submit',async(e)=>{
+    e.preventDefault();
+    const fd=new FormData(e.target);
+    const btn=e.target.querySelector('[type=submit]');
+    const newName=(fd.get('name')||'').trim(), newJobTitle=(fd.get('jobTitle')||'').trim();
+    setLoading(btn,true);
+    try{
+      await updateDoc(doc(db,'employees',S.user.id),{name:newName, jobTitle:newJobTitle});
+      S.user.name=newName; S.user.jobTitle=newJobTitle;
+      toast('تم حفظ البيانات بنجاح');
+      setLoading(btn,false,'<span>'+icon('check')+' حفظ البيانات</span>');
+      render();
+    }catch(err){
+      console.error(err);
+      setLoading(btn,false,'<span>'+icon('check')+' حفظ البيانات</span>');
+      toast('تعذر الحفظ',true);
+    }
+  });
   $('#pwForm').addEventListener('submit',async(e)=>{
     e.preventDefault();
     const errEl=$('#pwErr'); errEl.style.display='none';
