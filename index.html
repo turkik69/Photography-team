@@ -267,7 +267,8 @@ textarea.input{resize:vertical;min-height:78px}
 .empty-state p{font-size:13px;line-height:1.6}
 
 /* ---------- Filters/tabs ---------- */
-.chiprow{display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;scrollbar-width:none}
+.chiprow{display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;scrollbar-width:none;cursor:grab;user-select:none}
+.chiprow.dragging{cursor:grabbing}
 .chiprow::-webkit-scrollbar{display:none}
 .chip{
   flex:none;padding:8px 15px;border-radius:999px;border:1.5px solid var(--line-strong);background:#fff;
@@ -508,6 +509,26 @@ function setLoading(btn,loading,label){
   if(loading){btn.dataset.label=btn.innerHTML;btn.innerHTML='<span class="spinner" style="width:16px;height:16px;border-width:2px;margin:0"></span>';btn.disabled=true;}
   else{btn.innerHTML=btn.dataset.label||label||btn.innerHTML;btn.disabled=false;}
 }
+function enableDragScroll(sel){
+  const el=$(sel);
+  if(!el||el.dataset.dragBound) return;
+  el.dataset.dragBound='1';
+  let isDown=false, startX=0, startScroll=0, moved=false;
+  el.addEventListener('mousedown',(e)=>{
+    isDown=true; moved=false; el.classList.add('dragging');
+    startX=e.pageX; startScroll=el.scrollLeft;
+  });
+  window.addEventListener('mouseup',()=>{ isDown=false; el.classList.remove('dragging'); });
+  el.addEventListener('mouseleave',()=>{ isDown=false; el.classList.remove('dragging'); });
+  el.addEventListener('mousemove',(e)=>{
+    if(!isDown) return;
+    e.preventDefault();
+    const dx=e.pageX-startX;
+    if(Math.abs(dx)>3) moved=true;
+    el.scrollLeft=startScroll-dx;
+  });
+  el.addEventListener('click',(e)=>{ if(moved){ e.stopPropagation(); e.preventDefault(); moved=false; } },true);
+}
 function authErrorMessage(err){
   const code=err&&err.code||'';
   const known={
@@ -706,6 +727,7 @@ function render(){
   else if(S.route==='portal-request-detail') inner=renderRequestDetail(S.routeParam);
   else if(S.route==='portal-visits') inner=renderVisitsList();
   else if(S.route==='portal-visit-add') inner=renderVisitAdd();
+  else if(S.route==='portal-visit-detail') inner=renderVisitDetail(S.routeParam);
   else if(S.route==='portal-tasks') inner=renderTasksList();
   else if(S.route==='portal-task-add') inner=renderTaskAdd();
   else if(S.route==='portal-task-detail') inner=renderTaskDetail(S.routeParam);
@@ -741,6 +763,7 @@ function wirePortalRoute(){
   else if(S.route==='portal-request-detail') wireRequestDetail(S.routeParam);
   else if(S.route==='portal-visits') wireVisitsList();
   else if(S.route==='portal-visit-add') wireVisitAdd();
+  else if(S.route==='portal-visit-detail') wireVisitDetail(S.routeParam);
   else if(S.route==='portal-tasks') wireTasksList();
   else if(S.route==='portal-task-add') wireTaskAdd();
   else if(S.route==='portal-task-detail') wireTaskDetail(S.routeParam);
@@ -1193,7 +1216,7 @@ function requestsListDynamicHtml(){
   }
   const chips=[['all','الكل'],['submitted','طلب جديد'],['received','مستلم'],['assigned','تم الإسناد'],['completed','مكتمل']];
   return `
-    <div class="chiprow">
+    <div class="chiprow" id="reqChiprow">
       ${chips.map(([k,l])=>`<button class="chip ${statusFilter===k?'on':''}" data-filter="${k}">${l}</button>`).join('')}
     </div>
     <div class="section">
@@ -1214,6 +1237,7 @@ function renderRequestsList(){
 function wireReqListDynamicEvents(){
   $all('[data-filter]').forEach(b=>b.addEventListener('click',()=>{S.filters.requests=b.dataset.filter;refreshReqListDynamic();}));
   $all('[data-req]').forEach(el=>el.addEventListener('click',()=>go('portal-request-detail',el.dataset.req)));
+  enableDragScroll('#reqChiprow');
 }
 function refreshReqListDynamic(){
   const w=$('#reqListDynamic'); if(!w) return;
@@ -1531,10 +1555,10 @@ function visitsMonthOptions(){
   return Array.from(set).sort().reverse();
 }
 function visitsListInnerHtml(list){
-  if(list.length===0) return `<div class="section"><div class="empty-state">${icon('pin')}<h3>لا توجد زيارات مسجّلة</h3><p>لم تُسجَّل أي زيارة لهذا الشهر بعد</p></div></div>`;
+  if(list.length===0) return `<div class="section"><div class="empty-state">${icon('pin')}<h3>لا توجد زيارات مسجّلة</h3><p>لم تُسجَّل أي زيارة هنا بعد</p></div></div>`;
   return list.map(v=>`
-    <div class="section" style="margin-bottom:12px">
-      <div class="section-head">${icon('calendar')} ${fmtDate(v.date)}</div>
+    <div class="section" style="margin-bottom:12px;cursor:pointer" data-visit="${v.id}">
+      <div class="section-head">${icon('calendar')} ${v.date?fmtDate(v.date):'بدون تاريخ'}</div>
       ${(v.conductedBy&&v.conductedBy.length)?`<div class="section-body" style="padding:10px 16px 0"><div class="tag-list">${v.conductedBy.map(n=>`<span>${esc(n)}</span>`).join('')}</div></div>`:''}
       <div class="section-body" style="padding:6px 16px 12px">
         ${(v.sites||[]).map(s=>`
@@ -1551,15 +1575,19 @@ function visitsListInnerHtml(list){
 }
 function renderVisitsList(){
   const months=visitsMonthOptions();
-  const active=S.filters.visitsMonth&&months.includes(S.filters.visitsMonth)?S.filters.visitsMonth:months[0];
+  const hasUndated=S.visits.some(v=>!v.date);
+  const active=S.filters.visitsMonth&&(months.includes(S.filters.visitsMonth)||S.filters.visitsMonth==='undated')?S.filters.visitsMonth:months[0];
   S.filters.visitsMonth=active;
-  const list=S.visits.filter(v=>monthKey(v.date)===active).sort((a,b)=>b.date.localeCompare(a.date));
+  const list=active==='undated'
+    ? S.visits.filter(v=>!v.date)
+    : S.visits.filter(v=>monthKey(v.date)===active).sort((a,b)=>b.date.localeCompare(a.date));
   return `
   <div class="section-title-row"><h2>الزيارات</h2>
     <button class="btn btn-primary btn-sm" data-go="portal-visit-add">${icon('plus')} إضافة زيارة</button>
   </div>
-  <div class="chiprow">
+  <div class="chiprow" id="visitsChiprow">
     ${months.map(m=>`<button class="chip ${active===m?'on':''}" data-month="${m}">${monthLabel(m)}</button>`).join('')}
+    ${hasUndated?`<button class="chip ${active==='undated'?'on':''}" data-month="undated" style="border-color:var(--red-600);${active==='undated'?'background:var(--red-600);border-color:var(--red-600)':'color:var(--red-600)'}">بدون تاريخ</button>`:''}
   </div>
   <div id="visitsListWrap">${visitsListInnerHtml(list)}</div>
   `;
@@ -1567,10 +1595,15 @@ function renderVisitsList(){
 function wireVisitsList(){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   $all('[data-month]').forEach(b=>b.addEventListener('click',()=>{S.filters.visitsMonth=b.dataset.month; render();}));
+  $all('[data-visit]').forEach(el=>el.addEventListener('click',()=>go('portal-visit-detail',el.dataset.visit)));
+  enableDragScroll('#visitsChiprow');
 }
 
 let visitSiteRows=1;
-function siteRowHtml(idx){
+function siteRowHtml(idx, data){
+  data=data||{};
+  const isKnownType=TASK_TYPES.includes(data.taskType);
+  const isOther=data.taskType && !isKnownType;
   return `
   <div class="site-row" data-site-row="${idx}">
     <span class="site-num">موقع ${idx+1}</span>
@@ -1578,19 +1611,19 @@ function siteRowHtml(idx){
     <div class="field">
       <label>نوع المهمة</label>
       <select class="input" name="taskType_${idx}">
-        ${TASK_TYPES.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}
-        <option value="__other__">أخرى...</option>
+        ${TASK_TYPES.map(t=>`<option value="${esc(t)}" ${data.taskType===t?'selected':''}>${esc(t)}</option>`).join('')}
+        <option value="__other__" ${isOther?'selected':''}>أخرى...</option>
       </select>
     </div>
-    <div class="field" style="display:none" data-other-wrap="${idx}">
+    <div class="field" style="display:${isOther?'block':'none'}" data-other-wrap="${idx}">
       <label>حدد نوع المهمة</label>
-      <input class="input" name="taskTypeOther_${idx}">
+      <input class="input" name="taskTypeOther_${idx}" value="${isOther?esc(data.taskType):''}">
     </div>
     <div class="row2">
-      <div class="field"><label>اسم المشروع / الموقع</label><input class="input" name="projectName_${idx}" required></div>
-      <div class="field"><label>الموقع (الولاية)</label><input class="input" name="location_${idx}" required></div>
+      <div class="field"><label>اسم المشروع / الموقع</label><input class="input" name="projectName_${idx}" value="${esc(data.projectName||'')}" required></div>
+      <div class="field"><label>الموقع (الولاية)</label><input class="input" name="location_${idx}" value="${esc(data.location||'')}" required></div>
     </div>
-    <div class="field" style="margin-bottom:0"><label>الوصف / الملاحظات</label><textarea class="input" name="description_${idx}"></textarea></div>
+    <div class="field" style="margin-bottom:0"><label>الوصف / الملاحظات</label><textarea class="input" name="description_${idx}">${esc(data.description||'')}</textarea></div>
   </div>`;
 }
 function renderVisitAdd(){
@@ -1603,9 +1636,7 @@ function renderVisitAdd(){
         <div class="field"><label>تاريخ الزيارة</label><input class="input" type="date" name="visitDate" value="${todayISO()}" required></div>
         <div class="field" style="margin-bottom:0">
           <label>من قام بالزيارة</label>
-          <div class="check-grid">
-            ${S.employees.map(e=>`<label class="check-tile" data-tile><input type="checkbox" name="cond_${e.id}"><span class="avatar-sm">${esc(initials(e.name))}</span>${empTileLabel(e)}</label>`).join('')||'<p class="muted">لا يوجد موظفون بعد</p>'}
-          </div>
+          <div class="check-grid">${employeeCheckGridHtml('cond')}</div>
         </div>
       </div>
     </div>
@@ -1649,7 +1680,7 @@ function wireVisitAdd(){
         description:fd.get('description_'+idx)||''
       };
     });
-    const conductedBy=S.employees.filter(emp=>fd.has('cond_'+emp.id)).map(emp=>emp.name);
+    const conductedBy=collectCheckedEmployeeNames(fd,'cond');
     const visitDate=fd.get('visitDate');
     setLoading(btn,true);
     try{
@@ -1663,6 +1694,92 @@ function wireVisitAdd(){
       console.error(err);
       setLoading(btn,false,'<span>'+icon('check')+' حفظ الزيارة</span>');
       toast('تعذر حفظ الزيارة',true);
+    }
+  });
+}
+
+function renderVisitDetail(id){
+  const v=S.visits.find(x=>x.id===id);
+  if(!v) return `<div class="empty-state">${icon('alert')}<h3>الزيارة غير موجودة</h3></div>`;
+  const sites=(v.sites&&v.sites.length)?v.sites:[{}];
+  return `
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+    <button class="btn btn-ghost btn-sm" data-go="portal-visits">${icon('chev')} رجوع</button>
+    ${S.user.role==='lead'?`<button class="btn btn-danger btn-sm" id="deleteVisitBtn">${icon('trash')} حذف الزيارة</button>`:''}
+  </div>
+  ${!v.date?`
+  <div class="section" style="margin-bottom:14px;border-color:var(--red-600)">
+    <div class="section-body" style="display:flex;gap:10px;align-items:flex-start">
+      <span style="color:var(--red-600);flex:none">${icon('alert')}</span>
+      <p style="font-size:13px;line-height:1.7;color:var(--ink-700)">هذه الزيارة بلا تاريخ محدد (على الأغلب لم يكن التاريخ واضحاً بالملف الأصلي وقت الاستيراد) — الرجاء تحديد التاريخ الصحيح أدناه</p>
+    </div>
+  </div>`:''}
+  <form id="visitEditForm">
+    <div class="section" style="margin-bottom:14px">
+      <div class="section-body">
+        <div class="field"><label>تاريخ الزيارة</label><input class="input" type="date" name="visitDate" value="${esc(v.date||'')}"></div>
+        <div class="field" style="margin-bottom:0">
+          <label>من قام بالزيارة</label>
+          <div class="check-grid">${employeeCheckGridHtml('cond', v.conductedBy)}</div>
+        </div>
+      </div>
+    </div>
+    <div id="siteRowsWrap">${sites.map((s,i)=>siteRowHtml(i,s)).join('')}</div>
+    <button type="button" class="btn btn-outline btn-block" id="addSiteBtn" style="margin-bottom:16px">${icon('plus')} إضافة موقع آخر في نفس الزيارة</button>
+    <button class="btn btn-primary btn-block" type="submit" style="padding:15px">${icon('check')} حفظ التعديلات</button>
+  </form>
+  `;
+}
+function wireVisitDetail(id){
+  $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+  const v=S.visits.find(x=>x.id===id);
+  if(!v) return;
+  const sitesCount=(v.sites&&v.sites.length)?v.sites.length:1;
+  visitSiteRows=sitesCount;
+  for(let i=0;i<sitesCount;i++) wireSiteRow(i);
+  wireEmployeeCheckTiles();
+  $('#addSiteBtn').addEventListener('click',()=>{
+    $('#siteRowsWrap').insertAdjacentHTML('beforeend', siteRowHtml(visitSiteRows));
+    wireSiteRow(visitSiteRows);
+    visitSiteRows++;
+  });
+  const delBtn=$('#deleteVisitBtn');
+  if(delBtn) delBtn.addEventListener('click',async()=>{
+    if(!confirm('حذف هذه الزيارة نهائياً؟ لا يمكن التراجع عن هذا الإجراء.')) return;
+    try{
+      await deleteDoc(doc(db,'visits',id));
+      toast('تم حذف الزيارة');
+      go('portal-visits');
+    }catch(err){ console.error(err); toast('تعذر الحذف',true); }
+  });
+  $('#visitEditForm').addEventListener('submit',async(e)=>{
+    e.preventDefault();
+    const btn=e.target.querySelector('[type=submit]');
+    const fd=new FormData(e.target);
+    const rows=$all('[data-site-row]');
+    const sites=rows.map(row=>{
+      const idx=row.dataset.siteRow;
+      let taskType=fd.get('taskType_'+idx);
+      if(taskType==='__other__') taskType=fd.get('taskTypeOther_'+idx)||'أخرى';
+      return {
+        taskType,
+        projectName:fd.get('projectName_'+idx)||'',
+        location:fd.get('location_'+idx)||'',
+        description:fd.get('description_'+idx)||''
+      };
+    });
+    const conductedBy=collectCheckedEmployeeNames(fd,'cond');
+    const visitDate=fd.get('visitDate')||'';
+    setLoading(btn,true);
+    try{
+      await updateDoc(doc(db,'visits',id),{date:visitDate, sites, conductedBy, updatedAt:serverTimestamp()});
+      toast('تم حفظ التعديلات بنجاح');
+      if(visitDate) S.filters.visitsMonth=monthKey(visitDate);
+      go('portal-visits');
+    }catch(err){
+      console.error(err);
+      setLoading(btn,false,'<span>'+icon('check')+' حفظ التعديلات</span>');
+      toast('تعذر الحفظ',true);
     }
   });
 }
@@ -1694,7 +1811,7 @@ function renderTasksList(){
   <div class="section-title-row"><h2>المهام والمشاريع</h2>
     <button class="btn btn-primary btn-sm" data-go="portal-task-add">${icon('plus')} إضافة مهمة</button>
   </div>
-  <div class="chiprow">
+  <div class="chiprow" id="tasksChiprow">
     ${chips.map(([k,l])=>`<button class="chip ${filter===k?'on':''}" data-tfilter="${k}">${l}</button>`).join('')}
   </div>
   ${list.length===0?`<div class="section"><div class="empty-state">${icon('tasks')}<h3>لا توجد مهام مسجّلة</h3><p>يمكن إضافة أول مهمة أو مشروع للفريق</p></div></div>`:
@@ -1704,6 +1821,7 @@ function wireTasksList(){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   $all('[data-tfilter]').forEach(b=>b.addEventListener('click',()=>{S.filters.tasksStatus=b.dataset.tfilter;render();}));
   $all('[data-task]').forEach(el=>el.addEventListener('click',()=>go('portal-task-detail',el.dataset.task)));
+  enableDragScroll('#tasksChiprow');
 }
 function taskStatusPillsHtml(current){
   return `
@@ -1912,18 +2030,30 @@ async function ensureXLSXLoaded(){
 }
 function cellToISODate(cell){
   if(cell==null) return null;
+  let y,m,d;
   if(cell instanceof Date){
-    const y=cell.getUTCFullYear(), m=cell.getUTCMonth()+1, d=cell.getUTCDate();
-    if(!y||y<1990) return null;
-    return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    y=cell.getUTCFullYear(); m=cell.getUTCMonth()+1; d=cell.getUTCDate();
+  } else {
+    const s=String(cell).trim();
+    const match=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(!match) return null;
+    d=parseInt(match[1],10); m=parseInt(match[2],10); y=parseInt(match[3],10);
   }
-  const s=String(cell).trim();
-  const m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if(m){
-    const d=parseInt(m[1],10), mo=parseInt(m[2],10), y=parseInt(m[3],10);
-    return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  if(!y||y<2015||y>2100) return null;
+  /* بعض ملفاتها تحتوي خلايا تواريخ مُدخلة بترتيب يوم/شهر معكوس (خلل إدخال قديم بالمصدر) —
+     نتحقق: لو التاريخ الناتج بعيد بشكل غير منطقي عن الوقت الحالي، ولو تبديل اليوم بالشهر
+     ينتج تاريخاً أقرب للمنطق، نعتمد التبديل. ولو ما زال بعيداً حتى بعد المحاولة، نتركه فارغاً
+     بدل تخمين تاريخ خاطئ — يبقى قابلاً للتصحيح يدوياً من صفحة تفاصيل الزيارة/المهمة. */
+  const now=new Date();
+  const nowMonths=now.getUTCFullYear()*12+now.getUTCMonth();
+  const monthsAway=(mo)=>Math.abs((y*12+(mo-1))-nowMonths);
+  let finalM=m, finalD=d, diff=monthsAway(m);
+  if(diff>14 && d>=1 && d<=12 && d!==m){
+    const swapDiff=monthsAway(d);
+    if(swapDiff<diff){ finalM=d; finalD=m; diff=swapDiff; }
   }
-  return null;
+  if(diff>14) return null;
+  return `${y}-${String(finalM).padStart(2,'0')}-${String(finalD).padStart(2,'0')}`;
 }
 function parseVisitsRows(rows){
   const visits=[]; let current=null;
@@ -1931,9 +2061,10 @@ function parseVisitsRows(rows){
     const row=rows[i]||[];
     const desc=row[0], taskType=row[1], project=row[2], location=row[3], dateRaw=row[4], batchNum=row[5];
     if(batchNum==null && desc==null && taskType==null && project==null && location==null && dateRaw==null) continue;
-    if(dateRaw!=null){
+    if(dateRaw!=null || batchNum!=null){
       const iso=cellToISODate(dateRaw);
-      if(iso){ current={date:iso, sites:[]}; visits.push(current); }
+      current={date:iso||'', sites:[]};
+      visits.push(current);
     }
     if(!current) continue;
     if(project==null && taskType==null && desc==null) continue;
