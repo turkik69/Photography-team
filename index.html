@@ -625,6 +625,20 @@ function empTileLabel(e){
     ? `<span style="display:flex;flex-direction:column;line-height:1.35"><span>${esc(e.name)}</span><small class="muted" style="font-size:11px">${esc(e.jobTitle)}</small></span>`
     : `<span>${esc(e.name)}</span>`;
 }
+function employeeCheckGridHtml(namePrefix, selectedNames){
+  selectedNames=selectedNames||[];
+  return S.employees.map(e=>`
+    <label class="check-tile ${selectedNames.includes(e.name)?'on':''}" data-tile>
+      <input type="checkbox" name="${namePrefix}_${e.id}" ${selectedNames.includes(e.name)?'checked':''}>
+      <span class="avatar-sm">${esc(initials(e.name))}</span>${empTileLabel(e)}
+    </label>`).join('') || '<p class="muted">لا يوجد موظفون بعد</p>';
+}
+function collectCheckedEmployeeNames(fd, namePrefix){
+  return S.employees.filter(emp=>fd.has(namePrefix+'_'+emp.id)).map(emp=>emp.name);
+}
+function wireEmployeeCheckTiles(){
+  $all('[data-tile] input[type=checkbox]').forEach(cb=>cb.addEventListener('change',()=>cb.closest('[data-tile]').classList.toggle('on',cb.checked)));
+}
 function topbarHtml(){
   const u=S.user;
   return `
@@ -1521,6 +1535,7 @@ function visitsListInnerHtml(list){
   return list.map(v=>`
     <div class="section" style="margin-bottom:12px">
       <div class="section-head">${icon('calendar')} ${fmtDate(v.date)}</div>
+      ${(v.conductedBy&&v.conductedBy.length)?`<div class="section-body" style="padding:10px 16px 0"><div class="tag-list">${v.conductedBy.map(n=>`<span>${esc(n)}</span>`).join('')}</div></div>`:''}
       <div class="section-body" style="padding:6px 16px 12px">
         ${(v.sites||[]).map(s=>`
           <div style="padding:10px 0;border-bottom:1px dashed var(--line)">
@@ -1585,7 +1600,13 @@ function renderVisitAdd(){
   <form id="visitForm">
     <div class="section" style="margin-bottom:14px">
       <div class="section-body">
-        <div class="field" style="margin-bottom:0"><label>تاريخ الزيارة</label><input class="input" type="date" name="visitDate" value="${todayISO()}" required></div>
+        <div class="field"><label>تاريخ الزيارة</label><input class="input" type="date" name="visitDate" value="${todayISO()}" required></div>
+        <div class="field" style="margin-bottom:0">
+          <label>من قام بالزيارة</label>
+          <div class="check-grid">
+            ${S.employees.map(e=>`<label class="check-tile" data-tile><input type="checkbox" name="cond_${e.id}"><span class="avatar-sm">${esc(initials(e.name))}</span>${empTileLabel(e)}</label>`).join('')||'<p class="muted">لا يوجد موظفون بعد</p>'}
+          </div>
+        </div>
       </div>
     </div>
     <div id="siteRowsWrap">${siteRowHtml(0)}</div>
@@ -1606,6 +1627,7 @@ function wireVisitAdd(){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   visitSiteRows=1;
   wireSiteRow(0);
+  $all('[data-tile] input[type=checkbox]').forEach(cb=>cb.addEventListener('change',()=>cb.closest('[data-tile]').classList.toggle('on',cb.checked)));
   $('#addSiteBtn').addEventListener('click',()=>{
     $('#siteRowsWrap').insertAdjacentHTML('beforeend', siteRowHtml(visitSiteRows));
     wireSiteRow(visitSiteRows);
@@ -1627,11 +1649,12 @@ function wireVisitAdd(){
         description:fd.get('description_'+idx)||''
       };
     });
+    const conductedBy=S.employees.filter(emp=>fd.has('cond_'+emp.id)).map(emp=>emp.name);
     const visitDate=fd.get('visitDate');
     setLoading(btn,true);
     try{
       await addDoc(collection(db,'visits'),{
-        date:visitDate, sites, createdBy:S.user.name, createdAt:serverTimestamp()
+        date:visitDate, sites, conductedBy, createdBy:S.user.name, createdAt:serverTimestamp()
       });
       toast('تم حفظ الزيارة بنجاح');
       S.filters.visitsMonth=monthKey(visitDate);
@@ -1709,7 +1732,9 @@ function renderTaskAdd(){
         <div class="field"><label>تاريخ البدء</label><input class="input" type="date" name="startDate" value="${todayISO()}"></div>
         <div class="field"><label>تاريخ الانتهاء (إن وُجد)</label><input class="input" type="date" name="endDate"></div>
       </div>
-      <div class="field"><label>المسؤول عنه</label><input class="input" name="responsible" placeholder="أسماء مفصولة بفاصلة"></div>
+      <div class="field"><label>المسؤول عنه</label>
+        <div class="check-grid">${employeeCheckGridHtml('resp')}</div>
+      </div>
       <div class="field">
         <label>الحالة</label>
         ${taskStatusPillsHtml('in_progress')}
@@ -1722,11 +1747,12 @@ function renderTaskAdd(){
 function wireTaskAdd(){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   wireTaskStatusPills();
+  wireEmployeeCheckTiles();
   $('#taskForm').addEventListener('submit',async(e)=>{
     e.preventDefault();
     const btn=e.target.querySelector('[type=submit]');
     const fd=new FormData(e.target);
-    const responsible=(fd.get('responsible')||'').split(/[,،]/).map(s=>s.trim()).filter(Boolean);
+    const responsible=collectCheckedEmployeeNames(fd,'resp');
     setLoading(btn,true);
     try{
       await addDoc(collection(db,'tasks'),{
@@ -1765,7 +1791,9 @@ function renderTaskDetail(id){
         <div class="field"><label>تاريخ البدء</label><input class="input" type="date" name="startDate" value="${esc(t.startDate||'')}"></div>
         <div class="field"><label>تاريخ الانتهاء</label><input class="input" type="date" name="endDate" value="${esc(t.endDate||'')}"></div>
       </div>
-      <div class="field"><label>المسؤول عنه</label><input class="input" name="responsible" value="${esc((t.responsible||[]).join('، '))}" placeholder="أسماء مفصولة بفاصلة"></div>
+      <div class="field"><label>المسؤول عنه</label>
+        <div class="check-grid">${employeeCheckGridHtml('resp', t.responsible)}</div>
+      </div>
       <div class="field">
         <label>الحالة</label>
         ${taskStatusPillsHtml(t.status)}
@@ -1778,6 +1806,7 @@ function renderTaskDetail(id){
 function wireTaskDetail(id){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   wireTaskStatusPills();
+  wireEmployeeCheckTiles();
   const t=S.tasks.find(x=>x.id===id);
   const delBtn=$('#deleteTaskBtn');
   if(delBtn) delBtn.addEventListener('click',async()=>{
@@ -1800,7 +1829,7 @@ function wireTaskDetail(id){
     e.preventDefault();
     const btn=e.target.querySelector('[type=submit]');
     const fd=new FormData(f);
-    const responsible=(fd.get('responsible')||'').split(/[,،]/).map(s=>s.trim()).filter(Boolean);
+    const responsible=collectCheckedEmployeeNames(fd,'resp');
     setLoading(btn,true);
     try{
       await updateDoc(doc(db,'tasks',id),{
