@@ -1902,7 +1902,11 @@ function wireVisitAdd(){
         date:visitDate, sites, conductedBy, certified:S.user.role==='lead', createdBy:S.user.name, createdAt:serverTimestamp()
       });
       if(assignTo){
+        const emp=S.employees.find(x=>x.id===assignTo);
         await createNotification(assignTo, `تم إسناد مهمة زيارة لك بتاريخ ${fmtDateShort(visitDate)}، يجب الاطلاع عليها من خلال المنصة`, 'portal-visit-detail', newVisitRef.id);
+        S.filters.visitsMonth=monthKey(visitDate);
+        showAssignmentSentOverlay(emp, visitDate, sites);
+        return;
       }
       toast(S.user.role==='lead'?'تم حفظ الزيارة بنجاح':'تم حفظ الزيارة، بانتظار اعتماد المشرف');
       S.filters.visitsMonth=monthKey(visitDate);
@@ -1913,6 +1917,41 @@ function wireVisitAdd(){
       toast('تعذر حفظ الزيارة',true);
     }
   });
+}
+function buildAssignmentMailto(emp, visitDate, sites){
+  const to=`${emp.employeeNumber}@mm.gov.om`;
+  const sitesText=(sites||[]).map(s=>`- ${s.projectName||''} (${s.taskType||''}) — ${s.location||''}`).join(String.fromCharCode(10));
+  const subject='تم إسناد مهمة لك - منصة فريق التصوير';
+  const body=`عزيزي/عزيزتي ${emp.name}،
+
+تم إسناد مهمة زيارة لك بتاريخ ${fmtDateShort(visitDate)}.
+
+${sitesText}
+
+الرجاء الاطلاع على التفاصيل الكاملة والتأكيد من خلال منصة فريق التصوير.
+
+شكراً لك`;
+  return `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+function showAssignmentSentOverlay(emp, visitDate, sites){
+  const wrap=document.createElement('div');
+  wrap.className='overlay';
+  wrap.id='assignSentOverlay';
+  wrap.innerHTML=`
+    <div class="sheet">
+      <div class="sheet-head"><h3>${icon('check')} تم إسناد المهمة</h3><button class="sheet-close" id="closeAssignSent">${icon('x')}</button></div>
+      <p style="font-size:13.5px;line-height:1.8;color:var(--ink-700);margin-bottom:16px">
+        وصل ${esc(emp.name)} إشعار داخل المنصة بالمهمة الجديدة. تقدرين كمان ترسلين له بريد إلكتروني جاهز بنفس التفاصيل ليطّلع عليه مباشرة.
+      </p>
+      <a href="${buildAssignmentMailto(emp,visitDate,sites)}" class="btn btn-gold btn-block" style="margin-bottom:10px;text-decoration:none" id="sendAssignEmailBtn">${icon('send')} إرسال بالبريد الإلكتروني</a>
+      <button type="button" class="btn btn-outline btn-block" id="skipAssignEmail">تم، بدون بريد</button>
+    </div>`;
+  document.body.appendChild(wrap);
+  const close=()=>{ wrap.remove(); toast('تم حفظ الزيارة بنجاح'); go('portal-visits'); };
+  $('#closeAssignSent').addEventListener('click',close);
+  $('#skipAssignEmail').addEventListener('click',close);
+  $('#sendAssignEmailBtn').addEventListener('click',()=>setTimeout(close,300));
+  wrap.addEventListener('click',(e)=>{ if(e.target===wrap) close(); });
 }
 
 function renderVisitDetail(id){
