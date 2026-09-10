@@ -92,6 +92,14 @@ img{max-width:100%;display:block}
 .topbar-titles span{font-size:11.5px;color:var(--green-100);opacity:.85}
 .topbar-user{display:flex;align-items:center;gap:8px;position:relative}
 .topbar-avatar{width:34px;height:34px;border-radius:50%;background:var(--gold-600);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;border:none;padding:0;overflow:hidden;cursor:pointer}
+.topbar-bell{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;position:relative}
+.topbar-bell svg{width:18px;height:18px}
+.notif-badge{position:absolute;top:-2px;left:-2px;background:var(--red-600);color:#fff;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 3px;border:2px solid var(--green-900)}
+.notif-item{display:block;width:100%;text-align:right;background:#fff;border:none;border-bottom:1px solid var(--line);padding:11px 14px;cursor:pointer}
+.notif-item:last-child{border-bottom:none}
+.notif-item:active{background:var(--paper-50)}
+.notif-item.unread{background:var(--green-50)}
+.notif-item.unread:active{background:var(--green-100)}
 .topbar-menu{
   position:absolute;top:44px;left:0;background:#fff;color:var(--ink-900);
   border-radius:var(--radius-m);box-shadow:var(--shadow-3);min-width:200px;
@@ -217,6 +225,9 @@ textarea.input{resize:vertical;min-height:78px}
 .radio-pill.on.medium{background:var(--amber-600);border-color:var(--amber-600);color:#fff}
 .radio-pill.on.prescheduled{background:var(--blue-600);border-color:var(--blue-600);color:#fff}
 .err-text{color:var(--red-600);font-size:12.5px;font-weight:700;margin-top:8px}
+.input.field-invalid{border-color:var(--red-600);background:var(--red-100)}
+.field-error-msg{color:var(--red-600);font-size:11.5px;font-weight:700;margin-top:5px;display:flex;align-items:center;gap:4px}
+.field-error-msg svg{width:13px;height:13px;flex:none}
 .form-actions{display:flex;gap:10px;margin-top:6px;flex-wrap:wrap}
 
 /* ---------- Badges ---------- */
@@ -436,6 +447,8 @@ const S = {
   visits:[],
   meetings:[],
   tasks:[],
+  notifications:[],
+  notifMenuOpen:false,
   ready:false,
   menuOpen:false,
   pendingLoginError:null,
@@ -473,6 +486,7 @@ const ICON = {
   eyeoff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.9 17.9A10.7 10.7 0 0112 19c-7 0-11-7-11-7a19.4 19.4 0 015.1-5.6M9.9 4.2A9.7 9.7 0 0112 4c7 0 11 7 11 7a19.5 19.5 0 01-3 3.9M14.1 14.1a3 3 0 10-4.2-4.2"/><path d="M2 2l20 20"/></svg>',
   gauge:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14l3-4"/><circle cx="12" cy="14" r="1"/><path d="M4.9 19a9 9 0 1114.2 0"/><path d="M4 14H2M22 14h-2M6 8L4.5 6.5M18 8l1.5-1.5"/></svg>',
   tasks:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>',
+  bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0112 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 004 0"/></svg>',
 };
 function icon(name,cls){return `<span class="ic ${cls||''}" style="display:inline-flex">${ICON[name]||''}</span>`}
 
@@ -496,6 +510,16 @@ function fmtDateShort(iso){
   if(isNaN(d)) return iso;
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
 }
+function lastLoginLabel(e){
+  if(!e.lastLoginAt||!e.lastLoginAt.toDate) return 'لم يسجّل الدخول بعد';
+  const d=e.lastLoginAt.toDate();
+  const iso=d.toISOString().slice(0,10);
+  const daysAgo=Math.floor((Date.now()-d.getTime())/86400000);
+  if(daysAgo<=0) return 'آخر دخول: اليوم';
+  if(daysAgo===1) return 'آخر دخول: أمس';
+  if(daysAgo<30) return `آخر دخول: قبل ${daysAgo} يوم`;
+  return `آخر دخول: ${fmtDateShort(iso)}`;
+}
 function monthKey(iso){ if(!iso) return ''; return iso.slice(0,7); }
 function monthLabel(key){
   if(!key) return '';
@@ -515,6 +539,37 @@ function toast(msg,isError){
   document.body.appendChild(t);
   clearTimeout(toastTimer);
   toastTimer=setTimeout(()=>{t.remove()},3200);
+}
+/* تحقق موحّد من الحقول الإلزامية: يبرز الحقل الناقص بالأحمر برسالة تحت كل حقل، ويعيد أول عنصر للتمرير إليه (أو null إذا كل شي سليم) */
+function validateRequiredFields(formEl){
+  clearFieldErrors(formEl);
+  let firstInvalid=null;
+  $all('[data-required]',formEl).forEach(input=>{
+    const val=(input.value||'').trim();
+    if(!val){
+      input.classList.add('field-invalid');
+      const msg=document.createElement('div');
+      msg.className='field-error-msg';
+      msg.innerHTML=icon('alert')+`<span>الرجاء تعبئة "${esc(input.dataset.required)}"</span>`;
+      input.insertAdjacentElement('afterend', msg);
+      if(!firstInvalid) firstInvalid=input;
+    }
+  });
+  return firstInvalid;
+}
+function clearFieldErrors(formEl){
+  $all('.field-invalid',formEl).forEach(el=>el.classList.remove('field-invalid'));
+  $all('.field-error-msg',formEl).forEach(el=>el.remove());
+}
+/* إنشاء إشعار داخل المنصة لموظف محدد؛ route/relatedId اختياريان للربط بصفحة معيّنة عند الضغط على الإشعار */
+async function createNotification(toEmployeeId, message, route, relatedId){
+  if(!toEmployeeId) return;
+  try{
+    await addDoc(collection(db,'notifications'),{
+      toEmployeeId, message, route:route||'', relatedId:relatedId||'',
+      read:false, fromName:S.user?S.user.name:'', createdAt:serverTimestamp()
+    });
+  }catch(err){ console.error('createNotification',err); }
 }
 function setLoading(btn,loading,label){
   if(!btn) return;
@@ -595,6 +650,14 @@ function subscribeAll(){
     S.tasks=snap.docs.map(d=>({id:d.id,...d.data()}));
     render();
   },err=>console.error('tasks sub',err)));
+  unsubs.push(onSnapshot(query(collection(db,'notifications'),where('toEmployeeId','==',S.user.id)),snap=>{
+    S.notifications=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>{
+      const at=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;
+      const bt=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;
+      return bt-at;
+    });
+    render();
+  },err=>console.error('notifications sub',err)));
 }
 
 /* ---------------- حالة تسجيل الدخول ---------------- */
@@ -607,6 +670,7 @@ onAuthStateChanged(auth, async (fbUser)=>{
         S.user={id:fbUser.uid,...snap.data()};
         subscribeAll();
         S.ready=true;
+        updateDoc(doc(db,'employees',fbUser.uid),{lastLoginAt:serverTimestamp()}).catch(err=>console.error('lastLogin',err));
         if(S.route==='landing'||S.route==='login'){ go('portal-dashboard'); return; }
         render(); return;
       } else if(snap.exists()){
@@ -644,7 +708,7 @@ const NAV_ITEMS=[
   {key:'portal-dashboard',label:'الرئيسية',icon:'gauge'},
   {key:'portal-requests',label:'الطلبات',icon:'doc'},
   {key:'portal-visits',label:'الزيارات',icon:'pin'},
-  {key:'portal-tasks',label:'المهام',icon:'tasks'},
+  {key:'portal-tasks',label:'جدول الأعمال',icon:'tasks'},
   {key:'portal-meetings',label:'الاجتماعات',icon:'users'},
 ];
 function initials(name){
@@ -719,6 +783,10 @@ function topbarHtml(){
       </div>
       ${u?`
       <div class="topbar-user">
+        <div style="position:relative">
+          <button class="topbar-bell" id="notifBellBtn">${icon('bell')}${S.notifications.filter(n=>!n.read).length>0?`<span class="notif-badge">${S.notifications.filter(n=>!n.read).length>9?'9+':S.notifications.filter(n=>!n.read).length}</span>`:''}</button>
+          ${S.notifMenuOpen?notifPanelHtml():''}
+        </div>
         <button class="topbar-avatar" id="avatarBtn">${avatarInner(u)}</button>
         ${S.menuOpen?`
         <div class="topbar-menu" id="topMenu">
@@ -738,6 +806,24 @@ function topbarHtml(){
           <button class="danger" id="logoutBtn">${icon('logout')} تسجيل الخروج</button>
         </div>`:''}
       </div>`:''}
+    </div>
+  </div>`;
+}
+function notifPanelHtml(){
+  const list=S.notifications.slice(0,25);
+  const hasUnread=S.notifications.some(n=>!n.read);
+  return `
+  <div class="topbar-menu" id="notifMenu" style="width:290px">
+    <div style="padding:12px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between">
+      <strong style="font-size:13.5px">الإشعارات</strong>
+      ${hasUnread?`<button type="button" id="markAllReadBtn" style="background:none;border:none;color:var(--green-700);font-size:11px;font-weight:700;cursor:pointer">تعليم الكل كمقروء</button>`:''}
+    </div>
+    <div style="max-height:340px;overflow-y:auto">
+      ${list.length?list.map(n=>`
+        <button type="button" class="notif-item ${n.read?'':'unread'}" data-notif="${n.id}" data-notif-route="${esc(n.route||'')}" data-notif-param="${esc(n.relatedId||'')}">
+          <div style="font-size:12.5px;line-height:1.6">${esc(n.message)}</div>
+          <div class="muted" style="font-size:10.5px;margin-top:3px">${fmtDateShort((n.createdAt&&n.createdAt.toDate)?n.createdAt.toDate().toISOString().slice(0,10):'')}</div>
+        </button>`).join(''):`<div class="center-pad"><p class="muted" style="font-size:12.5px">لا توجد إشعارات</p></div>`}
     </div>
   </div>`;
 }
@@ -771,6 +857,7 @@ function render(){
   let inner='';
   if(S.route==='portal-dashboard') inner=renderDashboard();
   else if(S.route==='portal-requests') inner=renderRequestsList();
+  else if(S.route==='portal-request-add') inner=renderRequestAddInternal();
   else if(S.route==='portal-request-detail') inner=renderRequestDetail(S.routeParam);
   else if(S.route==='portal-visits') inner=renderVisitsList();
   else if(S.route==='portal-visit-add') inner=renderVisitAdd();
@@ -794,10 +881,27 @@ function render(){
 function wireShellEvents(){
   $all('.topbar [data-go], .bottomnav [data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   const av=$('#avatarBtn');
-  if(av) av.addEventListener('click',(e)=>{e.stopPropagation();S.menuOpen=!S.menuOpen;render();});
+  if(av) av.addEventListener('click',(e)=>{e.stopPropagation();S.menuOpen=!S.menuOpen;S.notifMenuOpen=false;render();});
+  const nb=$('#notifBellBtn');
+  if(nb) nb.addEventListener('click',(e)=>{e.stopPropagation();S.notifMenuOpen=!S.notifMenuOpen;S.menuOpen=false;render();});
   document.addEventListener('click',(e)=>{
     if(S.menuOpen && !e.target.closest('.topbar-user')){S.menuOpen=false;render();}
+    if(S.notifMenuOpen && !e.target.closest('.topbar-user')){S.notifMenuOpen=false;render();}
   },{once:true});
+  const markAllBtn=$('#markAllReadBtn');
+  if(markAllBtn) markAllBtn.addEventListener('click',async(e)=>{
+    e.stopPropagation();
+    const unread=S.notifications.filter(n=>!n.read);
+    try{ await Promise.all(unread.map(n=>updateDoc(doc(db,'notifications',n.id),{read:true}))); }
+    catch(err){ console.error(err); }
+  });
+  $all('[data-notif]').forEach(b=>b.addEventListener('click',async(e)=>{
+    e.stopPropagation();
+    const nid=b.dataset.notif, route=b.dataset.notifRoute, param=b.dataset.notifParam;
+    try{ await updateDoc(doc(db,'notifications',nid),{read:true}); }catch(err){ console.error(err); }
+    S.notifMenuOpen=false;
+    if(route) go(route, param||null); else render();
+  }));
   const lo=$('#logoutBtn');
   if(lo) lo.addEventListener('click',async()=>{ await signOut(auth); toast('تم تسجيل الخروج'); });
   const bk=$('#backupBtn');
@@ -807,6 +911,7 @@ function wireShellEvents(){
 }
 function wirePortalRoute(){
   if(S.route==='portal-requests') wireRequestsList();
+  else if(S.route==='portal-request-add') wireRequestAddInternal();
   else if(S.route==='portal-request-detail') wireRequestDetail(S.routeParam);
   else if(S.route==='portal-visits') wireVisitsList();
   else if(S.route==='portal-visit-add') wireVisitAdd();
@@ -935,28 +1040,19 @@ const PRIORITIES=[
   {k:'medium',label:'متوسط'},
   {k:'prescheduled',label:'مجدول مسبقاً'},
 ];
-function renderPublicRequestForm(){
+function requestFormFieldsHtml(){
   return `
-  <div class="screen">
-    <div class="topbar">
-      <div class="topbar-inner">
-        <button class="btn btn-ghost btn-sm" style="color:#fff" data-go="landing">${icon('chev')} رجوع</button>
-        <div class="topbar-titles" style="text-align:center"><h1>استمارة طلب خدمات التصوير</h1><span>دائرة الفعاليات والتوعية</span></div>
-        <span style="width:60px"></span>
-      </div>
-    </div>
-    <main class="portal-main"><div class="container">
-      <form id="reqForm">
+      <form id="reqForm" novalidate>
         <div class="section">
           <div class="section-head">${icon('id')} معلومات مقدم الطلب</div>
           <div class="section-body">
             <div class="row2">
-              <div class="field"><label>المديرية / الدائرة</label><input class="input" name="directorate" required></div>
+              <div class="field"><label>المديرية / الدائرة</label><input class="input" name="directorate" data-required="المديرية / الدائرة" required></div>
               <div class="field"><label>رقم المحول</label><input class="input" name="transferNumber"></div>
             </div>
             <div class="row2">
-              <div class="field"><label>اسم الموظف</label><input class="input" name="employeeName" required></div>
-              <div class="field"><label>الرقم الوظيفي</label><input class="input" name="employeeNumber" required></div>
+              <div class="field"><label>اسم الموظف</label><input class="input" name="employeeName" data-required="اسم الموظف" required></div>
+              <div class="field"><label>الرقم الوظيفي</label><input class="input" name="employeeNumber" data-required="الرقم الوظيفي" required></div>
             </div>
           </div>
         </div>
@@ -964,14 +1060,14 @@ function renderPublicRequestForm(){
         <div class="section">
           <div class="section-head">${icon('calendar')} معلومات الفعالية / الموضوع</div>
           <div class="section-body">
-            <div class="field"><label>اسم الفعالية / الموضوع</label><input class="input" name="eventName" required></div>
+            <div class="field"><label>اسم الفعالية / الموضوع</label><input class="input" name="eventName" data-required="اسم الفعالية / الموضوع" required></div>
             <div class="field"><label>وصف مختصر للفعالية / الموضوع</label><textarea class="input" name="eventDesc"></textarea></div>
             <div class="row3">
-              <div class="field"><label>تاريخ التصوير</label><input class="input" type="date" name="eventDate" required></div>
+              <div class="field"><label>تاريخ التصوير</label><input class="input" type="date" name="eventDate" data-required="تاريخ التصوير" required></div>
               <div class="field"><label>وقت التصوير</label><input class="input" type="time" name="startTime"></div>
               <div class="field"><label>وقت انتهاء التصوير</label><input class="input" type="time" name="endTime"></div>
             </div>
-            <div class="field"><label>موقع التصوير</label><input class="input" name="location" required></div>
+            <div class="field"><label>موقع التصوير</label><input class="input" name="location" data-required="موقع التصوير" required></div>
           </div>
         </div>
 
@@ -1044,12 +1140,41 @@ function renderPublicRequestForm(){
         <div class="err-text" id="reqFormErr" style="display:none"></div>
         <button class="btn btn-primary btn-block" type="submit" id="reqSubmitBtn" style="padding:15px">${icon('send')} إرسال الطلب</button>
         <p class="muted" style="text-align:center;margin-top:12px;line-height:1.7">الالتزام بالمعايير المعتمدة في بلدية مسقط وضوابط النشر الحكومي</p>
-      </form>
+      </form>`;
+}
+function renderPublicRequestForm(){
+  return `
+  <div class="screen">
+    <div class="topbar">
+      <div class="topbar-inner">
+        <button class="btn btn-ghost btn-sm" style="color:#fff" data-go="landing">${icon('chev')} رجوع</button>
+        <div class="topbar-titles" style="text-align:center"><h1>استمارة طلب خدمات التصوير</h1><span>دائرة الفعاليات والتوعية</span></div>
+        <span style="width:60px"></span>
+      </div>
+    </div>
+    <main class="portal-main"><div class="container">
+      ${requestFormFieldsHtml()}
     </div></main>
   </div>`;
 }
-function wirePublicRequestForm(){
-  $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+function renderRequestAddInternal(){
+  return `
+  <button class="btn btn-ghost btn-sm" data-go="portal-requests" style="margin-bottom:10px">${icon('chev')} رجوع</button>
+  <div class="section-title-row"><h2>تسجيل طلب تصوير</h2></div>
+  <p class="muted" style="margin-bottom:12px">لتسجيل طلب وصلكم بطريقة أخرى (اتصال، حضورياً...) كمرجع بالمنصة</p>
+  ${requestFormFieldsHtml()}
+  `;
+}
+function wireRequestFormCommon(onSuccess){
+  $all('[data-required]').forEach(input=>{
+    input.addEventListener('input',()=>{
+      if(input.classList.contains('field-invalid')){
+        input.classList.remove('field-invalid');
+        const next=input.nextElementSibling;
+        if(next&&next.classList.contains('field-error-msg')) next.remove();
+      }
+    });
+  });
   $all('[data-tile] input[type=checkbox]').forEach(cb=>{
     cb.addEventListener('change',()=>{
       cb.closest('[data-tile]').classList.toggle('on',cb.checked);
@@ -1068,6 +1193,13 @@ function wirePublicRequestForm(){
   f.addEventListener('submit',async(e)=>{
     e.preventDefault();
     const errEl=$('#reqFormErr'); errEl.style.display='none';
+    const firstInvalid=validateRequiredFields(f);
+    if(firstInvalid){
+      firstInvalid.scrollIntoView({behavior:'smooth',block:'center'});
+      firstInvalid.focus();
+      toast('الرجاء تعبئة كل الحقول المطلوبة (موضّحة بالأحمر)',true);
+      return;
+    }
     const fd=new FormData(f);
     const btn=$('#reqSubmitBtn');
     setLoading(btn,true);
@@ -1106,13 +1238,25 @@ function wirePublicRequestForm(){
         status:'submitted',
         createdAt: serverTimestamp(), updatedAt: serverTimestamp()
       };
-      await addDoc(collection(db,'requests'), data);
-      renderRequestSuccess(requestNumber);
+      if(S.user) data.createdBy=S.user.name;
+      const newRef=await addDoc(collection(db,'requests'), data);
+      onSuccess(requestNumber, newRef.id);
     }catch(err){
       console.error(err);
       setLoading(btn,false,'<span>'+icon('send')+' إرسال الطلب</span>');
       errEl.textContent='تعذر إرسال الطلب، الرجاء المحاولة مرة أخرى'; errEl.style.display='block';
     }
+  });
+}
+function wirePublicRequestForm(){
+  $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+  wireRequestFormCommon((requestNumber)=>renderRequestSuccess(requestNumber));
+}
+function wireRequestAddInternal(){
+  $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+  wireRequestFormCommon((requestNumber, requestId)=>{
+    toast(`تم تسجيل الطلب ${requestNumber} بنجاح`);
+    go('portal-request-detail', requestId);
   });
 }
 async function nextRequestNumber(){
@@ -1282,7 +1426,9 @@ function requestsListDynamicHtml(){
 }
 function renderRequestsList(){
   return `
-  <div class="section-title-row"><h2>طلبات خدمات التصوير</h2></div>
+  <div class="section-title-row"><h2>طلبات خدمات التصوير</h2>
+    <button class="btn btn-primary btn-sm" data-go="portal-request-add">${icon('plus')} تسجيل طلب</button>
+  </div>
   <div class="searchbar">
     ${icon('search')}
     <input class="input" id="reqSearchInput" placeholder="بحث بالعنوان أو رقم الطلب أو مقدم الطلب" value="${esc(S.filters.requestsSearch||'')}">
@@ -1621,6 +1767,7 @@ function visitsListInnerHtml(list){
       <div class="grid-card-top">
         <span class="badge badge-role-member">${sites.length} ${sites.length===1?'موقع':'مواقع'}</span>
         ${!v.date?`<span class="badge badge-urgent">بدون تاريخ</span>`:''}
+        ${v.certified===false?`<span class="badge badge-urgent">بانتظار الاعتماد</span>`:''}
       </div>
       <div class="grid-card-title">${v.date?fmtDate(v.date):'بدون تاريخ'}</div>
       <div class="grid-card-sub">${esc(typesPreview||(sites[0]&&sites[0].projectName)||'')}</div>
@@ -1695,6 +1842,17 @@ function renderVisitAdd(){
         </div>
       </div>
     </div>
+    <div class="section" style="margin-bottom:14px">
+      <div class="section-body">
+        <div class="field" style="margin-bottom:0">
+          <label>${icon('bell')} إسناد المهمة إلى موظف <span class="muted">(اختياري — يصله إشعار داخل المنصة)</span></label>
+          <select class="input" name="assignTo">
+            <option value="">-- بدون إسناد --</option>
+            ${S.employees.filter(e=>e.id!==S.user.id).map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    </div>
     <div id="siteRowsWrap">${siteRowHtml(0)}</div>
     <button type="button" class="btn btn-outline btn-block" id="addSiteBtn" style="margin-bottom:16px">${icon('plus')} إضافة موقع آخر في نفس الزيارة</button>
     <button class="btn btn-primary btn-block" type="submit" form="visitForm" style="padding:15px">${icon('check')} حفظ الزيارة</button>
@@ -1737,12 +1895,16 @@ function wireVisitAdd(){
     });
     const conductedBy=collectCheckedEmployeeNames(fd,'cond');
     const visitDate=fd.get('visitDate');
+    const assignTo=fd.get('assignTo')||'';
     setLoading(btn,true);
     try{
-      await addDoc(collection(db,'visits'),{
-        date:visitDate, sites, conductedBy, createdBy:S.user.name, createdAt:serverTimestamp()
+      const newVisitRef=await addDoc(collection(db,'visits'),{
+        date:visitDate, sites, conductedBy, certified:S.user.role==='lead', createdBy:S.user.name, createdAt:serverTimestamp()
       });
-      toast('تم حفظ الزيارة بنجاح');
+      if(assignTo){
+        await createNotification(assignTo, `تم إسناد مهمة زيارة لك بتاريخ ${fmtDateShort(visitDate)}، يجب الاطلاع عليها من خلال المنصة`, 'portal-visit-detail', newVisitRef.id);
+      }
+      toast(S.user.role==='lead'?'تم حفظ الزيارة بنجاح':'تم حفظ الزيارة، بانتظار اعتماد المشرف');
       S.filters.visitsMonth=monthKey(visitDate);
       go('portal-visits');
     }catch(err){
@@ -1758,10 +1920,20 @@ function renderVisitDetail(id){
   if(!v) return `<div class="empty-state">${icon('alert')}<h3>الزيارة غير موجودة</h3></div>`;
   const sites=(v.sites&&v.sites.length)?v.sites:[{}];
   return `
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap">
     <button class="btn btn-ghost btn-sm" data-back-nav>${icon('chev')} رجوع</button>
-    ${S.user.role==='lead'?`<button class="btn btn-danger btn-sm" id="deleteVisitBtn">${icon('trash')} حذف الزيارة</button>`:''}
+    <div style="display:flex;gap:8px">
+      ${(S.user.role==='lead'&&v.certified===false)?`<button class="btn btn-gold btn-sm" id="certifyVisitBtn">${icon('check')} اعتماد</button>`:''}
+      ${(S.user.role==='lead'||v.createdBy===S.user.name)?`<button class="btn btn-danger btn-sm" id="deleteVisitBtn">${icon('trash')} حذف الزيارة</button>`:''}
+    </div>
   </div>
+  ${v.certified===false?`
+  <div class="section" style="margin-bottom:14px;border-color:var(--gold-500)">
+    <div class="section-body" style="display:flex;gap:10px;align-items:center">
+      <span style="color:var(--gold-600);flex:none">${icon('alert')}</span>
+      <p style="font-size:13px;line-height:1.7;color:var(--ink-700)">بانتظار اعتماد المشرف لتوثيقها ضمن أعمال الفريق الرسمية</p>
+    </div>
+  </div>`:''}
   ${!v.date?`
   <div class="section" style="margin-bottom:14px;border-color:var(--red-600)">
     <div class="section-body" style="display:flex;gap:10px;align-items:flex-start">
@@ -1798,6 +1970,14 @@ function wireVisitDetail(id){
     $('#siteRowsWrap').insertAdjacentHTML('beforeend', siteRowHtml(visitSiteRows));
     wireSiteRow(visitSiteRows);
     visitSiteRows++;
+  });
+  const certifyBtn=$('#certifyVisitBtn');
+  if(certifyBtn) certifyBtn.addEventListener('click',async()=>{
+    setLoading(certifyBtn,true);
+    try{
+      await updateDoc(doc(db,'visits',id),{certified:true});
+      toast('تم اعتماد الزيارة');
+    }catch(err){ console.error(err); setLoading(certifyBtn,false,'<span>'+icon('check')+' اعتماد</span>'); toast('تعذر الاعتماد',true); }
   });
   const delBtn=$('#deleteVisitBtn');
   if(delBtn) delBtn.addEventListener('click',async()=>{
@@ -1852,6 +2032,7 @@ function taskListItemHtml(t){
   <div class="grid-card" data-task="${t.id}">
     <div class="grid-card-top">
       <span class="badge ${taskStatusBadgeClass(status)}">${taskStatusLabel(status)}</span>
+      ${t.certified===false?`<span class="badge badge-urgent">بانتظار الاعتماد</span>`:''}
       ${t.startDate?`<span class="muted" style="font-size:11px">${fmtDateShort(t.startDate)}${t.endDate?' - '+fmtDateShort(t.endDate):''}</span>`:''}
     </div>
     <div class="grid-card-title">${esc(t.title)}</div>
@@ -1864,7 +2045,7 @@ function renderTasksList(){
   if(filter!=='all') list=list.filter(t=>(t.status||'not_started')===filter);
   const chips=[['all','الكل'],['in_progress','جاري العمل'],['completed','تم الانتهاء'],['not_started','لم يبدأ']];
   return `
-  <div class="section-title-row"><h2>المهام والمشاريع</h2>
+  <div class="section-title-row"><h2>جدول الأعمال</h2>
     <button class="btn btn-primary btn-sm" data-go="portal-task-add">${icon('plus')} إضافة مهمة</button>
   </div>
   <div class="chiprow" id="tasksChiprow">
@@ -1932,9 +2113,9 @@ function wireTaskAdd(){
       await addDoc(collection(db,'tasks'),{
         title:fd.get('title')||'', startDate:fd.get('startDate')||'', endDate:fd.get('endDate')||'',
         responsible, status:fd.get('status')||'in_progress', notes:fd.get('notes')||'',
-        createdBy:S.user.name, createdAt:serverTimestamp()
+        certified:S.user.role==='lead', createdBy:S.user.name, createdAt:serverTimestamp()
       });
-      toast('تم حفظ المهمة بنجاح');
+      toast(S.user.role==='lead'?'تم حفظ المهمة بنجاح':'تم حفظ المهمة، بانتظار اعتماد المشرف');
       go('portal-tasks');
     }catch(err){
       console.error(err);
@@ -1947,10 +2128,20 @@ function renderTaskDetail(id){
   const t=S.tasks.find(x=>x.id===id);
   if(!t) return `<div class="empty-state">${icon('alert')}<h3>المهمة غير موجودة</h3></div>`;
   return `
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap">
     <button class="btn btn-ghost btn-sm" data-back-nav>${icon('chev')} رجوع</button>
-    ${(S.user.role==='lead'&&!t.deleted)?`<button class="btn btn-danger btn-sm" id="deleteTaskBtn">${icon('trash')} حذف المهمة</button>`:''}
+    <div style="display:flex;gap:8px">
+      ${(S.user.role==='lead'&&t.certified===false)?`<button class="btn btn-gold btn-sm" id="certifyTaskBtn">${icon('check')} اعتماد</button>`:''}
+      ${((S.user.role==='lead'||t.createdBy===S.user.name)&&!t.deleted)?`<button class="btn btn-danger btn-sm" id="deleteTaskBtn">${icon('trash')} حذف المهمة</button>`:''}
+    </div>
   </div>
+  ${t.certified===false?`
+  <div class="section" style="margin-bottom:14px;border-color:var(--gold-500)">
+    <div class="section-body" style="display:flex;gap:10px;align-items:center">
+      <span style="color:var(--gold-600);flex:none">${icon('alert')}</span>
+      <p style="font-size:13px;line-height:1.7;color:var(--ink-700)">بانتظار اعتماد المشرف لتوثيقها ضمن أعمال الفريق الرسمية</p>
+    </div>
+  </div>`:''}
   ${t.deleted?`
   <div class="section" style="margin-bottom:14px;border-color:var(--red-600)">
     <div class="section-body" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
@@ -1983,6 +2174,14 @@ function wireTaskDetail(id){
   wireTaskStatusPills();
   wireEmployeeCheckTiles();
   const t=S.tasks.find(x=>x.id===id);
+  const certifyBtn=$('#certifyTaskBtn');
+  if(certifyBtn) certifyBtn.addEventListener('click',async()=>{
+    setLoading(certifyBtn,true);
+    try{
+      await updateDoc(doc(db,'tasks',id),{certified:true});
+      toast('تم اعتماد المهمة');
+    }catch(err){ console.error(err); setLoading(certifyBtn,false,'<span>'+icon('check')+' اعتماد</span>'); toast('تعذر الاعتماد',true); }
+  });
   const delBtn=$('#deleteTaskBtn');
   if(delBtn) delBtn.addEventListener('click',async()=>{
     if(!confirm(`نقل المهمة "${t&&t.title||''}" إلى سلة المحذوفات؟ يمكن استعادتها لاحقاً.`)) return;
@@ -2233,14 +2432,14 @@ function wireImportModal(){
     try{
       if(pendingImportData.type==='visits'){
         for(const v of pendingImportData.data){
-          await addDoc(collection(db,'visits'),{date:v.date, sites:v.sites, createdBy:S.user.name, createdAt:serverTimestamp()});
+          await addDoc(collection(db,'visits'),{date:v.date, sites:v.sites, certified:true, createdBy:S.user.name, createdAt:serverTimestamp()});
         }
       } else {
         const statusMap={'تم الانتهاء':'completed','جاري العمل':'in_progress'};
         for(const t of pendingImportData.data){
           await addDoc(collection(db,'tasks'),{
             title:t.title, startDate:t.startDate, endDate:t.endDate, responsible:t.responsible,
-            status:statusMap[t.status]||'not_started', notes:t.notes,
+            status:statusMap[t.status]||'not_started', notes:t.notes, certified:true,
             createdBy:S.user.name, createdAt:serverTimestamp()
           });
         }
@@ -2406,6 +2605,7 @@ function renderEmployees(){
             ${e.jobTitle?`<span>· ${esc(e.jobTitle)}</span>`:''}
             ${e.capacity?`<span>· ${esc(e.capacity)}</span>`:''}
           </div>
+          <div class="muted" style="font-size:11px;margin-top:2px">${lastLoginLabel(e)}</div>
         </div>
         <button class="btn btn-ghost btn-sm" data-edit-emp="${e.id}">${icon('edit')}</button>
         <button class="btn btn-ghost btn-sm" data-toggle-emp="${e.id}">${e.active===false?'تفعيل':'تعطيل'}</button>
@@ -2631,7 +2831,7 @@ function wireAddEmpModal(){
    ============================================================ */
 function computeReportStats(start,end){
   const reqInPeriod=S.requests.filter(r=>!r.deleted&&r.event&&r.event.date&&r.event.date>=start&&r.event.date<=end);
-  const visitsInPeriod=S.visits.filter(v=>v.date&&v.date>=start&&v.date<=end);
+  const visitsInPeriod=S.visits.filter(v=>v.certified!==false&&v.date&&v.date>=start&&v.date<=end);
   const meetingsInPeriod=S.meetings.filter(m=>m.date&&m.date>=start&&m.date<=end);
   const reqByStatus={submitted:0,received:0,assigned:0,completed:0};
   const reqByPriority={urgent:0,medium:0,prescheduled:0};
@@ -2656,9 +2856,9 @@ function computeReportStats(start,end){
 function computeEmployeeDetail(empId,empName,start,end){
   const reqAsPhotog=S.requests.filter(r=>!r.deleted&&r.internal&&r.internal.assignedPhotographers&&r.internal.assignedPhotographers.includes(empId)&&r.event&&r.event.date>=start&&r.event.date<=end);
   const reqAsEditor=S.requests.filter(r=>!r.deleted&&r.internal&&r.internal.assignedEditors&&r.internal.assignedEditors.includes(empId)&&r.event&&r.event.date>=start&&r.event.date<=end);
-  const visitsConducted=S.visits.filter(v=>((v.conductedBy&&v.conductedBy.includes(empName))||v.createdBy===empName)&&v.date&&v.date>=start&&v.date<=end);
+  const visitsConducted=S.visits.filter(v=>v.certified!==false&&((v.conductedBy&&v.conductedBy.includes(empName))||v.createdBy===empName)&&v.date&&v.date>=start&&v.date<=end);
   const meetingsAttended=S.meetings.filter(m=>m.attendees&&m.attendees.includes(empId)&&m.date>=start&&m.date<=end);
-  const tasksResponsible=S.tasks.filter(t=>!t.deleted&&t.responsible&&t.responsible.includes(empName)&&t.startDate&&t.startDate>=start&&t.startDate<=end);
+  const tasksResponsible=S.tasks.filter(t=>!t.deleted&&t.certified!==false&&t.responsible&&t.responsible.includes(empName)&&t.startDate&&t.startDate>=start&&t.startDate<=end);
   return {reqAsPhotog,reqAsEditor,visitsConducted,meetingsAttended,tasksResponsible};
 }
 function barChartHtml(rows){
