@@ -380,10 +380,10 @@ textarea.input{resize:vertical;min-height:78px}
 .nl-sheet{background:#fff;border-radius:var(--radius-l);box-shadow:var(--shadow-2);overflow:hidden;margin-bottom:24px}
 .nl-header{background:linear-gradient(135deg,var(--green-900),var(--green-700));position:relative;overflow:hidden}
 .nl-header-bar{position:absolute;inset:0;background:radial-gradient(600px 200px at 100% 0%,rgba(203,156,60,.25),transparent 70%)}
-.nl-header-row{position:relative;padding:26px 22px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.nl-title h1{color:#fff;font-size:20px;font-weight:800;margin-bottom:4px}
+.nl-header-row{position:relative;padding:30px 22px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center}
+.nl-title h1{color:#fff;font-size:21px;font-weight:800;margin-bottom:5px}
 .nl-title p{color:rgba(255,255,255,.75);font-size:12px}
-.nl-period-badge{background:var(--gold-600);color:#fff;font-weight:800;font-size:13px;padding:8px 16px;border-radius:999px;white-space:nowrap}
+.nl-period-badge{background:var(--gold-600);color:#fff;font-weight:800;font-size:13px;padding:8px 18px;border-radius:999px;white-space:nowrap}
 .nl-section{padding:22px;border-bottom:1px dashed var(--line)}
 .nl-section:last-of-type{border-bottom:none}
 .nl-section h2{display:flex;align-items:center;gap:8px;font-size:14.5px;font-weight:800;color:var(--green-900);margin-bottom:14px}
@@ -911,7 +911,8 @@ function render(){
   else if(S.route==='portal-employees') inner=renderEmployees();
   else if(S.route==='portal-reports') inner=renderReports();
   else if(S.route==='portal-newsletters') inner=renderNewslettersList();
-  else if(S.route==='portal-newsletter-add') inner=renderNewsletterAdd();
+  else if(S.route==='portal-newsletter-add') inner=renderNewsletterAdd(null);
+  else if(S.route==='portal-newsletter-edit') inner=renderNewsletterAdd(S.routeParam);
   else if(S.route==='portal-newsletter-view') inner=renderNewsletterView(S.routeParam);
   else if(S.route==='portal-trash') inner=renderTrash();
   else if(S.route==='portal-account') inner=renderAccount();
@@ -968,7 +969,8 @@ function wirePortalRoute(){
   else if(S.route==='portal-employees') wireEmployees();
   else if(S.route==='portal-reports') wireReports();
   else if(S.route==='portal-newsletters') wireNewslettersList();
-  else if(S.route==='portal-newsletter-add') wireNewsletterAdd();
+  else if(S.route==='portal-newsletter-add') wireNewsletterAdd(null);
+  else if(S.route==='portal-newsletter-edit') wireNewsletterAdd(S.routeParam);
   else if(S.route==='portal-newsletter-view') wireNewsletterView(S.routeParam);
   else if(S.route==='portal-trash') wireTrash();
   else if(S.route==='portal-account') wireAccount();
@@ -3232,6 +3234,7 @@ async function exportReportToExcel(){
   }
 }
 function periodTypeLabel(t){ return t==='quarter'?'ربع سنوي':t==='year'?'سنوي':'شهري'; }
+function periodTypeTitleLabel(t){ return t==='quarter'?'ربع السنوية':t==='year'?'السنوية':'الشهرية'; }
 function renderNewslettersList(){
   return `
   <div class="section-title-row"><h2>النشرة الشهرية</h2>
@@ -3274,30 +3277,38 @@ function nlCoverageRowHtml(idx,data){
     <div class="field" style="margin-bottom:0;max-width:120px"><input class="input" type="number" min="0" name="ccount_${idx}" value="${data.count!=null?data.count:''}" placeholder="العدد"></div>
   </div>`;
 }
-function renderNewsletterAdd(){
+function renderNewsletterAdd(editId){
   if(S.user.role!=='lead') return `<div class="empty-state">${icon('alert')}<h3>هذه الصفحة مخصصة للمشرف فقط</h3></div>`;
-  nlWilayatCount=1; nlEventsCount=1; nlCoverageCount=1; nlPhotos=[];
-  const now=new Date();
+  const existing=editId?S.newsletters.find(x=>x.id===editId):null;
+  if(editId&&!existing) return `<div class="empty-state">${icon('alert')}<h3>النشرة غير موجودة</h3></div>`;
+  const wilayatVisits=existing?(existing.wilayatVisits||[]):[];
+  const events=existing?(existing.events||[]):[];
+  const projectCoverage=existing?(existing.projectCoverage||[]):[];
+  nlWilayatCount=Math.max(1,wilayatVisits.length);
+  nlEventsCount=Math.max(1,events.length);
+  nlCoverageCount=Math.max(1,projectCoverage.length);
+  nlPhotos=existing?JSON.parse(JSON.stringify(existing.photos||[])):[];
+  const pType=existing?existing.periodType:'month';
   return `
-  <button class="btn btn-ghost btn-sm" data-go="portal-newsletters" style="margin-bottom:10px">${icon('chev')} رجوع</button>
-  <div class="section-title-row"><h2>إصدار نشرة جديد</h2></div>
+  <button class="btn btn-ghost btn-sm" id="nlBackBtn" style="margin-bottom:10px">${icon('chev')} رجوع</button>
+  <div class="section-title-row"><h2>${existing?'تعديل الإصدار':'إصدار نشرة جديد'}</h2></div>
   <form id="nlForm">
     <div class="section" style="margin-bottom:14px"><div class="section-body">
       <div class="field"><label>نوع الإصدار</label>
         <div class="radio-row" id="nlPeriodTypeRow">
-          <button type="button" class="radio-pill on" data-nltype="month">شهري</button>
-          <button type="button" class="radio-pill" data-nltype="quarter">ربع سنوي</button>
-          <button type="button" class="radio-pill" data-nltype="year">سنوي</button>
+          <button type="button" class="radio-pill ${pType==='month'?'on':''}" data-nltype="month">شهري</button>
+          <button type="button" class="radio-pill ${pType==='quarter'?'on':''}" data-nltype="quarter">ربع سنوي</button>
+          <button type="button" class="radio-pill ${pType==='year'?'on':''}" data-nltype="year">سنوي</button>
         </div>
-        <input type="hidden" name="periodType" value="month">
+        <input type="hidden" name="periodType" value="${pType}">
       </div>
-      <div id="nlPeriodValueWrap">${nlPeriodValueHtml('month')}</div>
+      <div id="nlPeriodValueWrap">${nlPeriodValueHtml(pType, existing)}</div>
     </div></div>
 
     <div class="section" style="margin-bottom:14px">
       <div class="section-head">${icon('pin')} إجمالي عدد الزيارات حسب الولاية</div>
       <div class="section-body">
-        <div id="nlWilayatWrap">${nlWilayatRowHtml(0)}</div>
+        <div id="nlWilayatWrap">${(wilayatVisits.length?wilayatVisits:[{}]).map((w,i)=>nlWilayatRowHtml(i,w)).join('')}</div>
         <button type="button" class="btn btn-outline btn-sm" id="nlAddWilayat">${icon('plus')} إضافة ولاية</button>
       </div>
     </div>
@@ -3305,7 +3316,7 @@ function renderNewsletterAdd(){
     <div class="section" style="margin-bottom:14px">
       <div class="section-head">${icon('calendar')} الفعاليات</div>
       <div class="section-body">
-        <div id="nlEventsWrap">${nlEventRowHtml(0)}</div>
+        <div id="nlEventsWrap">${(events.length?events:[{}]).map((ev,i)=>nlEventRowHtml(i,ev)).join('')}</div>
         <button type="button" class="btn btn-outline btn-sm" id="nlAddEvent">${icon('plus')} إضافة فعالية</button>
       </div>
     </div>
@@ -3313,7 +3324,7 @@ function renderNewsletterAdd(){
     <div class="section" style="margin-bottom:14px">
       <div class="section-head">${icon('camera')} تغطية المشاريع (حسب المديرية)</div>
       <div class="section-body">
-        <div id="nlCoverageWrap">${nlCoverageRowHtml(0)}</div>
+        <div id="nlCoverageWrap">${(projectCoverage.length?projectCoverage:[{}]).map((c,i)=>nlCoverageRowHtml(i,c)).join('')}</div>
         <button type="button" class="btn btn-outline btn-sm" id="nlAddCoverage">${icon('plus')} إضافة مديرية</button>
       </div>
     </div>
@@ -3327,24 +3338,25 @@ function renderNewsletterAdd(){
       </div>
     </div>
 
-    <button class="btn btn-primary btn-block" type="submit" id="nlSubmitBtn" style="padding:15px">${icon('check')} حفظ وإصدار النشرة</button>
+    <button class="btn btn-primary btn-block" type="submit" id="nlSubmitBtn" style="padding:15px">${icon('check')} ${existing?'حفظ التعديلات':'حفظ وإصدار النشرة'}</button>
   </form>
   `;
 }
-function nlPeriodValueHtml(type){
+function nlPeriodValueHtml(type, existing){
   const now=new Date();
   if(type==='month'){
-    const val=now.toISOString().slice(0,7);
+    const val=(existing&&existing.periodType==='month')?existing.period:now.toISOString().slice(0,7);
     return `<div class="field" style="margin-bottom:0"><label>الشهر</label><input class="input" type="month" name="periodValue" value="${val}"></div>`;
   }
   if(type==='quarter'){
-    const y=now.getFullYear(), q=currentQuarter();
+    let y=now.getFullYear(), q=currentQuarter();
+    if(existing&&existing.periodType==='quarter'){ const p=existing.period.split('-Q'); y=parseInt(p[0],10); q=parseInt(p[1],10); }
     return `<div class="row2">
       <div class="field" style="margin-bottom:0"><label>السنة</label><select class="input" name="periodYear">${yearOptions().map(yy=>`<option ${yy===y?'selected':''}>${yy}</option>`).join('')}</select></div>
       <div class="field" style="margin-bottom:0"><label>الربع</label><select class="input" name="periodQuarter">${[1,2,3,4].map(qq=>`<option value="${qq}" ${qq===q?'selected':''}>الربع ${qq}</option>`).join('')}</select></div>
     </div>`;
   }
-  const y=now.getFullYear();
+  const y=(existing&&existing.periodType==='year')?parseInt(existing.period,10):now.getFullYear();
   return `<div class="field" style="margin-bottom:0"><label>السنة</label><select class="input" name="periodYear">${yearOptions().map(yy=>`<option ${yy===y?'selected':''}>${yy}</option>`).join('')}</select></div>`;
 }
 function nlPhotosGridHtml(){
@@ -3355,14 +3367,16 @@ function nlPhotosGridHtml(){
       <button type="button" data-remove-photo="${i}" style="position:absolute;top:6px;left:6px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;cursor:pointer">${icon('x')}</button>
     </div>`).join('');
 }
-function wireNewsletterAdd(){
+function wireNewsletterAdd(editId){
   if(S.user.role!=='lead') return;
-  $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+  $('#nlBackBtn').addEventListener('click',()=>{
+    if(editId) go('portal-newsletter-view', editId); else go('portal-newsletters');
+  });
   $all('[data-nltype]').forEach(b=>b.addEventListener('click',()=>{
     $all('[data-nltype]').forEach(x=>x.classList.remove('on'));
     b.classList.add('on');
     $('#nlForm input[name=periodType]').value=b.dataset.nltype;
-    $('#nlPeriodValueWrap').innerHTML=nlPeriodValueHtml(b.dataset.nltype);
+    $('#nlPeriodValueWrap').innerHTML=nlPeriodValueHtml(b.dataset.nltype, null);
   }));
   $('#nlAddWilayat').addEventListener('click',()=>{
     $('#nlWilayatWrap').insertAdjacentHTML('beforeend', nlWilayatRowHtml(nlWilayatCount));
@@ -3429,15 +3443,24 @@ function wireNewsletterAdd(){
     });
     setLoading(btn,true);
     try{
-      const ref=await addDoc(collection(db,'newsletters'),{
-        period, periodType, periodLabel, wilayatVisits, events, projectCoverage, photos:nlPhotos,
-        createdBy:S.user.name, createdAt:serverTimestamp()
-      });
-      toast('تم إصدار النشرة بنجاح');
-      go('portal-newsletter-view', ref.id);
+      if(editId){
+        await updateDoc(doc(db,'newsletters',editId),{
+          period, periodType, periodLabel, wilayatVisits, events, projectCoverage, photos:nlPhotos,
+          updatedAt:serverTimestamp()
+        });
+        toast('تم حفظ التعديلات بنجاح');
+        go('portal-newsletter-view', editId);
+      } else {
+        const ref=await addDoc(collection(db,'newsletters'),{
+          period, periodType, periodLabel, wilayatVisits, events, projectCoverage, photos:nlPhotos,
+          createdBy:S.user.name, createdAt:serverTimestamp()
+        });
+        toast('تم إصدار النشرة بنجاح');
+        go('portal-newsletter-view', ref.id);
+      }
     }catch(err){
       console.error(err);
-      setLoading(btn,false,'<span>'+icon('check')+' حفظ وإصدار النشرة</span>');
+      setLoading(btn,false,'<span>'+icon('check')+' '+(editId?'حفظ التعديلات':'حفظ وإصدار النشرة')+'</span>');
       toast(err.code==='resource-exhausted'||/longer than.*1048487/.test(err.message||'')?'حجم البيانات كبير جداً، قلّلي عدد الصور أو صغّري حجمها':'تعذر حفظ النشرة',true);
     }
   });
@@ -3483,6 +3506,7 @@ function renderNewsletterView(id){
     <button class="btn btn-ghost btn-sm" data-go="portal-newsletters">${icon('chev')} رجوع</button>
     <div style="display:flex;gap:8px">
       <button class="btn btn-outline btn-sm" id="printNlBtn">${icon('doc')} تصدير PDF</button>
+      ${S.user.role==='lead'?`<button class="btn btn-outline btn-sm" id="editNlBtn">${icon('edit')} تعديل</button>`:''}
       ${S.user.role==='lead'?`<button class="btn btn-danger btn-sm" id="deleteNlBtn">${icon('trash')} حذف</button>`:''}
     </div>
   </div>
@@ -3490,11 +3514,11 @@ function renderNewsletterView(id){
     <div class="nl-header">
       <div class="nl-header-bar"></div>
       <div class="nl-header-row">
+        <div class="nl-period-badge">${esc(n.periodLabel||n.period)}</div>
         <div class="nl-title">
-          <h1>النشرة ${periodTypeLabel(n.periodType)}</h1>
+          <h1>النشرة ${periodTypeTitleLabel(n.periodType)}</h1>
           <p>فريق التصوير — دائرة الفعاليات والتوعية</p>
         </div>
-        <div class="nl-period-badge">${esc(n.periodLabel||n.period)}</div>
       </div>
     </div>
 
@@ -3550,6 +3574,8 @@ function wireNewsletterView(id){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   const pb=$('#printNlBtn');
   if(pb) pb.addEventListener('click',()=>window.print());
+  const eb=$('#editNlBtn');
+  if(eb) eb.addEventListener('click',()=>go('portal-newsletter-edit', id));
   const db2=$('#deleteNlBtn');
   if(db2) db2.addEventListener('click',async()=>{
     if(!confirm('حذف هذا الإصدار نهائياً؟')) return;
