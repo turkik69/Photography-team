@@ -889,8 +889,7 @@ function render(){
   if(!S.ready){ app.innerHTML='<div class="loading-screen"><div class="spinner"></div></div>'; return; }
 
   if(S.route==='landing') { app.innerHTML=renderLanding(); wireLanding(); return; }
-  if(S.route==='request-form'){ app.innerHTML=renderPublicRequestForm(); wirePublicRequestForm(); return; }
-  if(S.route==='login'){ app.innerHTML=renderLanding(true); wireLanding(); return; }
+  if(S.route==='login'){ app.innerHTML=renderLanding(); wireLanding(); return; }
 
   /* المسارات التالية تتطلب تسجيل دخول */
   if(!S.user){ go('landing'); return; }
@@ -981,9 +980,7 @@ function wirePortalRoute(){
 /* ============================================================
    الصفحة الرئيسية (Landing) + تسجيل الدخول
    ============================================================ */
-let landingTab='submit';
-function renderLanding(forceLogin){
-  if(forceLogin) landingTab='login';
+function renderLanding(){
   return `
   <div class="hero-wrap">
     <svg class="hero-rings" width="360" height="360" viewBox="0 0 360 360"><circle cx="180" cy="180" r="170" stroke="#fff" stroke-width="1.5" fill="none"/><circle cx="180" cy="180" r="120" stroke="#fff" stroke-width="1.5" fill="none"/><circle cx="180" cy="180" r="70" stroke="#fff" stroke-width="1.5" fill="none"/></svg>
@@ -992,21 +989,8 @@ function renderLanding(forceLogin){
       <h1>منصة فريق التصوير<br><span class="dept">دائرة الفعاليات والتوعية - بلدية مسقط</span></h1>
     </div>
     <div class="hero-card">
-      <div class="tabswitch">
-        <button data-tab="submit" class="${landingTab==='submit'?'on':''}">تقديم طلب تصوير</button>
-        <button data-tab="login" class="${landingTab==='login'?'on':''}">دخول فريق التصوير</button>
-      </div>
       <div id="landingBody"></div>
     </div>
-  </div>`;
-}
-function landingBodySubmitHtml(){
-  return `
-  <div class="center-pad" style="padding:10px 4px 4px">
-    ${icon('camera')}
-    <h3 style="font-size:15.5px;margin:14px 0 8px;color:var(--ink-900)">تحتاج تغطية تصوير أو فيديو؟</h3>
-    <p class="muted" style="line-height:1.7;margin-bottom:20px">تعبئة استمارة طلب خدمات التصوير تتيح لفريق التصوير التواصل لتنسيق التغطية</p>
-    <button class="btn btn-primary btn-block" id="goRequestForm">${icon('send')} تقديم طلب جديد</button>
   </div>`;
 }
 function landingBodyLoginHtml(err){
@@ -1030,13 +1014,11 @@ function landingBodyLoginHtml(err){
 }
 function wireLanding(){
   renderLandingBody(S.pendingLoginError);
-  $all('[data-tab]').forEach(b=>b.addEventListener('click',()=>{S.pendingLoginError=null; landingTab=b.dataset.tab;render();}));
-  const gf=$('#goRequestForm'); if(gf) gf.addEventListener('click',()=>go('request-form'));
 }
 function renderLandingBody(loginErr){
   const el=$('#landingBody'); if(!el) return;
-  el.innerHTML = landingTab==='login'?landingBodyLoginHtml(loginErr):landingBodySubmitHtml();
-  if(landingTab==='login'){
+  el.innerHTML = landingBodyLoginHtml(loginErr);
+  {
     const tp=$('#togglePass');
     if(tp) tp.addEventListener('click',()=>{
       const inp=$('#loginPass');
@@ -1191,21 +1173,6 @@ function requestFormFieldsHtml(){
         <p class="muted" style="text-align:center;margin-top:12px;line-height:1.7">الالتزام بالمعايير المعتمدة في بلدية مسقط وضوابط النشر الحكومي</p>
       </form>`;
 }
-function renderPublicRequestForm(){
-  return `
-  <div class="screen">
-    <div class="topbar">
-      <div class="topbar-inner">
-        <button class="btn btn-ghost btn-sm" style="color:#fff" data-go="landing">${icon('chev')} رجوع</button>
-        <div class="topbar-titles" style="text-align:center"><h1>استمارة طلب خدمات التصوير</h1><span>دائرة الفعاليات والتوعية</span></div>
-        <span style="width:60px"></span>
-      </div>
-    </div>
-    <main class="portal-main"><div class="container">
-      ${requestFormFieldsHtml()}
-    </div></main>
-  </div>`;
-}
 function renderRequestAddInternal(){
   return `
   <button class="btn btn-ghost btn-sm" data-go="portal-requests" style="margin-bottom:10px">${icon('chev')} رجوع</button>
@@ -1297,10 +1264,6 @@ function wireRequestFormCommon(onSuccess){
     }
   });
 }
-function wirePublicRequestForm(){
-  $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
-  wireRequestFormCommon((requestNumber)=>renderRequestSuccess(requestNumber));
-}
 function wireRequestAddInternal(){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   wireRequestFormCommon((requestNumber, requestId)=>{
@@ -1319,28 +1282,6 @@ async function nextRequestNumber(){
   });
   return `REQ-${year}-${String(num).padStart(4,'0')}`;
 }
-function renderRequestSuccess(reqNo){
-  $('#app').innerHTML=`
-  <div class="hero-wrap">
-    <div class="hero-top">
-      <div class="hero-logo"><img src="data:image/png;base64,${LOGO_B64}" alt="شعار بلدية مسقط"></div>
-    </div>
-    <div class="hero-card" style="text-align:center;padding-top:36px">
-      <div style="width:64px;height:64px;border-radius:50%;background:var(--green-100);color:var(--green-700);display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
-        <span style="width:30px;height:30px;display:block">${ICON.check}</span>
-      </div>
-      <h2 style="font-size:18px;margin-bottom:8px">تم إرسال طلبك بنجاح</h2>
-      <p class="muted" style="line-height:1.8;margin-bottom:6px">سيتواصل معك فريق التصوير قريباً لتنسيق التغطية</p>
-      <div style="background:var(--green-50);border-radius:var(--radius-m);padding:14px;margin:18px 0">
-        <div class="muted" style="margin-bottom:4px">رقم الطلب</div>
-        <div style="font-size:20px;font-weight:800;color:var(--green-800)">${esc(reqNo)}</div>
-      </div>
-      <button class="btn btn-primary btn-block" id="backHomeBtn">العودة للصفحة الرئيسية</button>
-    </div>
-  </div>`;
-  $('#backHomeBtn').addEventListener('click',()=>go('landing'));
-}
-
 /* ============================================================
    لوحة التحكم الرئيسية
    ============================================================ */
@@ -1496,6 +1437,7 @@ function refreshReqListDynamic(){
   wireReqListDynamicEvents();
 }
 function wireRequestsList(){
+  $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   wireReqListDynamicEvents();
   const si=$('#reqSearchInput');
   if(si) si.addEventListener('input',()=>{S.filters.requestsSearch=si.value; refreshReqListDynamic();});
@@ -1945,16 +1887,19 @@ function wireVisitAdd(){
     const conductedBy=collectCheckedEmployeeNames(fd,'cond');
     const visitDate=fd.get('visitDate');
     const assignTo=fd.get('assignTo')||'';
+    const assignedEmp=assignTo?S.employees.find(x=>x.id===assignTo):null;
+    /* المهمة المسندة تُحتسب من ضمن أعمال الموظف المكلّف بها، وليست ضمن أعمال المشرف المُسنِد،
+       فنضيف اسمه لقائمة "من قام بالزيارة" تلقائياً حتى تظهر بتقاريره وأدائه فور الإسناد */
+    if(assignedEmp && !conductedBy.includes(assignedEmp.name)) conductedBy.push(assignedEmp.name);
     setLoading(btn,true);
     try{
       const newVisitRef=await addDoc(collection(db,'visits'),{
         date:visitDate, sites, conductedBy, certified:S.user.role==='lead', createdBy:S.user.name, createdAt:serverTimestamp()
       });
-      if(assignTo){
-        const emp=S.employees.find(x=>x.id===assignTo);
+      if(assignedEmp){
         await createNotification(assignTo, `تم إسناد مهمة زيارة لك بتاريخ ${fmtDateShort(visitDate)}، يجب الاطلاع عليها من خلال المنصة`, 'portal-visit-detail', newVisitRef.id);
         S.filters.visitsMonth=monthKey(visitDate);
-        showAssignmentSentOverlay(emp, visitDate, sites);
+        showAssignmentSentOverlay(assignedEmp, visitDate, sites);
         return;
       }
       toast(S.user.role==='lead'?'تم حفظ الزيارة بنجاح':'تم حفظ الزيارة، بانتظار اعتماد المشرف');
@@ -2935,7 +2880,8 @@ function computeReportStats(start,end){
   const perEmp=S.employees.map(e=>{
     const asPhotog=reqInPeriod.filter(r=>r.internal&&r.internal.assignedPhotographers&&r.internal.assignedPhotographers.includes(e.id)).length;
     const asEditor=reqInPeriod.filter(r=>r.internal&&r.internal.assignedEditors&&r.internal.assignedEditors.includes(e.id)).length;
-    const visitsLogged=visitsInPeriod.filter(v=>v.createdBy===e.name || (v.conductedBy&&v.conductedBy.includes(e.name))).length;
+    /* الزيارة تُحتسب لمن قام بها فعلياً (conductedBy)؛ ولا يُحتسب المُسجِّل (createdBy) إلا إذا كانت القائمة فارغة (بيانات قديمة مستوردة بلا تحديد) */
+    const visitsLogged=visitsInPeriod.filter(v=>(v.conductedBy&&v.conductedBy.length)?v.conductedBy.includes(e.name):v.createdBy===e.name).length;
     const meetingsAttended=meetingsInPeriod.filter(m=>m.attendees&&m.attendees.includes(e.id)).length;
     return {emp:e,asPhotog,asEditor,visitsLogged,meetingsAttended,total:asPhotog+asEditor+visitsLogged+meetingsAttended};
   }).sort((a,b)=>b.total-a.total);
@@ -2944,7 +2890,7 @@ function computeReportStats(start,end){
 function computeEmployeeDetail(empId,empName,start,end){
   const reqAsPhotog=S.requests.filter(r=>!r.deleted&&r.internal&&r.internal.assignedPhotographers&&r.internal.assignedPhotographers.includes(empId)&&r.event&&r.event.date>=start&&r.event.date<=end);
   const reqAsEditor=S.requests.filter(r=>!r.deleted&&r.internal&&r.internal.assignedEditors&&r.internal.assignedEditors.includes(empId)&&r.event&&r.event.date>=start&&r.event.date<=end);
-  const visitsConducted=S.visits.filter(v=>v.certified!==false&&((v.conductedBy&&v.conductedBy.includes(empName))||v.createdBy===empName)&&v.date&&v.date>=start&&v.date<=end);
+  const visitsConducted=S.visits.filter(v=>v.certified!==false&&((v.conductedBy&&v.conductedBy.length)?v.conductedBy.includes(empName):v.createdBy===empName)&&v.date&&v.date>=start&&v.date<=end);
   const meetingsAttended=S.meetings.filter(m=>m.attendees&&m.attendees.includes(empId)&&m.date>=start&&m.date<=end);
   const tasksResponsible=S.tasks.filter(t=>!t.deleted&&t.certified!==false&&t.responsible&&t.responsible.includes(empName)&&t.startDate&&t.startDate>=start&&t.startDate<=end);
   return {reqAsPhotog,reqAsEditor,visitsConducted,meetingsAttended,tasksResponsible};
