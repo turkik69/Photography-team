@@ -2744,12 +2744,13 @@ function employeeDetailReportHtml(emp, period){
     <div class="section-head">${icon('camera')} طلبات التصوير</div>
     <div class="section-body" style="padding:0">
       ${[...reqMap.values()].map(({r,photog,editor})=>`
-        <div class="list-item" style="cursor:default">
+        <div class="list-item" data-report-req="${r.id}">
           <div class="list-item-icon">${icon('doc')}</div>
           <div class="list-item-body">
             <div class="list-item-title">${esc((r.event&&r.event.name)||'')}</div>
             <div class="list-item-sub"><span>${esc(r.requestNumber||'')}</span><span>${fmtDateShort(r.event&&r.event.date)}</span>${photog?'<span class="badge badge-role-member">تصوير</span>':''}${editor?'<span class="badge badge-medium">مونتاج</span>':''}</div>
           </div>
+          <div class="list-item-chev">${icon('chev')}</div>
         </div>`).join('')}
     </div>
   </div>`:''}
@@ -2758,12 +2759,13 @@ function employeeDetailReportHtml(emp, period){
     <div class="section-head">${icon('pin')} الزيارات</div>
     <div class="section-body" style="padding:0">
       ${d.visitsConducted.map(v=>`
-        <div class="list-item" style="cursor:default">
+        <div class="list-item" data-report-visit="${v.id}">
           <div class="list-item-icon">${icon('pin')}</div>
           <div class="list-item-body">
             <div class="list-item-title">${v.date?fmtDate(v.date):'بدون تاريخ'}</div>
             <div class="list-item-sub">${(v.sites||[]).map(s=>esc(s.projectName)).join('، ')}</div>
           </div>
+          <div class="list-item-chev">${icon('chev')}</div>
         </div>`).join('')}
     </div>
   </div>`:''}
@@ -2772,9 +2774,10 @@ function employeeDetailReportHtml(emp, period){
     <div class="section-head">${icon('users')} الاجتماعات</div>
     <div class="section-body" style="padding:0">
       ${d.meetingsAttended.map(m=>`
-        <div class="list-item" style="cursor:default">
+        <div class="list-item" data-report-meeting="${m.id}">
           <div class="list-item-icon">${icon('users')}</div>
           <div class="list-item-body"><div class="list-item-title">${esc(m.title)}</div><div class="list-item-sub">${fmtDateShort(m.date)}</div></div>
+          <div class="list-item-chev">${icon('chev')}</div>
         </div>`).join('')}
     </div>
   </div>`:''}
@@ -2783,9 +2786,10 @@ function employeeDetailReportHtml(emp, period){
     <div class="section-head">${icon('tasks')} المهام والمشاريع</div>
     <div class="section-body" style="padding:0">
       ${d.tasksResponsible.map(t=>`
-        <div class="list-item" style="cursor:default">
+        <div class="list-item" data-report-task="${t.id}">
           <div class="list-item-icon">${icon('tasks')}</div>
           <div class="list-item-body"><div class="list-item-title">${esc(t.title)}</div><div class="list-item-sub"><span class="badge ${taskStatusBadgeClass(t.status)}">${taskStatusLabel(t.status)}</span></div></div>
+          <div class="list-item-chev">${icon('chev')}</div>
         </div>`).join('')}
     </div>
   </div>`:''}
@@ -2882,6 +2886,10 @@ function wireReportBodyInteractions(){
   }));
   const backBtn=$('#backToOverviewBtn');
   if(backBtn) backBtn.addEventListener('click',()=>{ S.filters.reportSelectedEmpId=null; render(); });
+  $all('[data-report-req]').forEach(el=>el.addEventListener('click',()=>go('portal-request-detail',el.dataset.reportReq)));
+  $all('[data-report-visit]').forEach(el=>el.addEventListener('click',()=>go('portal-visit-detail',el.dataset.reportVisit)));
+  $all('[data-report-meeting]').forEach(el=>el.addEventListener('click',()=>go('portal-meeting-detail',el.dataset.reportMeeting)));
+  $all('[data-report-task]').forEach(el=>el.addEventListener('click',()=>go('portal-task-detail',el.dataset.reportTask)));
 }
 async function exportReportToExcel(){
   const btn=$('#exportExcelBtn');
