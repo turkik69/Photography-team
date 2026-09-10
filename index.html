@@ -376,6 +376,36 @@ textarea.input{resize:vertical;min-height:78px}
 .avatar-sm{width:28px;height:28px;border-radius:50%;background:var(--green-100);color:var(--green-800);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex:none;overflow:hidden}
 .center-pad{padding:40px 20px;text-align:center}
 
+/* ---------- النشرة الشهرية ---------- */
+.nl-sheet{background:#fff;border-radius:var(--radius-l);box-shadow:var(--shadow-2);overflow:hidden;margin-bottom:24px}
+.nl-header{background:linear-gradient(135deg,var(--green-900),var(--green-700));position:relative;overflow:hidden}
+.nl-header-bar{position:absolute;inset:0;background:radial-gradient(600px 200px at 100% 0%,rgba(203,156,60,.25),transparent 70%)}
+.nl-header-row{position:relative;padding:26px 22px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.nl-title h1{color:#fff;font-size:20px;font-weight:800;margin-bottom:4px}
+.nl-title p{color:rgba(255,255,255,.75);font-size:12px}
+.nl-period-badge{background:var(--gold-600);color:#fff;font-weight:800;font-size:13px;padding:8px 16px;border-radius:999px;white-space:nowrap}
+.nl-section{padding:22px;border-bottom:1px dashed var(--line)}
+.nl-section:last-of-type{border-bottom:none}
+.nl-section h2{display:flex;align-items:center;gap:8px;font-size:14.5px;font-weight:800;color:var(--green-900);margin-bottom:14px}
+.nl-section h2 svg{width:18px;height:18px;color:var(--gold-600)}
+.nl-total{color:var(--gold-600);font-weight:800}
+.nl-stat-row{display:flex;flex-wrap:wrap;gap:10px}
+.nl-stat-chip{background:var(--paper-50);border:1px solid var(--line);border-radius:var(--radius-m);padding:10px 16px;text-align:center;min-width:88px}
+.nl-stat-num{display:block;font-size:20px;font-weight:800;color:var(--green-800)}
+.nl-stat-lbl{display:block;font-size:11px;color:var(--ink-500);margin-top:2px}
+.nl-list{list-style:none;display:flex;flex-direction:column;gap:9px}
+.nl-list li{font-size:13px;color:var(--ink-900);padding-right:16px;position:relative}
+.nl-list li::before{content:'';position:absolute;right:0;top:7px;width:6px;height:6px;border-radius:50%;background:var(--gold-600)}
+.nl-muted{color:var(--ink-500);font-weight:400}
+.nl-coverage-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.nl-coverage-item{background:var(--paper-50);border:1px solid var(--line);border-radius:var(--radius-s);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;font-size:12.5px}
+.nl-coverage-item strong{color:var(--green-800);font-size:12px}
+.nl-photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+.nl-photo-frame{margin:0;border:6px solid #fff;outline:2px solid var(--gold-500);border-radius:6px;box-shadow:var(--shadow-1);overflow:hidden;break-inside:avoid}
+.nl-photo-frame img{width:100%;height:150px;object-fit:cover;display:block}
+.nl-photo-frame figcaption{padding:7px 9px;font-size:10.5px;color:var(--ink-500);text-align:center;background:#fff}
+.nl-footer{padding:16px 22px;text-align:center;font-size:10.5px;color:var(--ink-500);background:var(--paper-50)}
+
 /* ---------- Print (reports) ---------- */
 .print-header{display:none}
 @media print{
@@ -390,6 +420,10 @@ textarea.input{resize:vertical;min-height:78px}
   .print-header p{font-size:11px;color:var(--ink-500);margin-top:2px}
   .section{break-inside:avoid;box-shadow:none;border:1px solid var(--line-strong)}
   .list-item{break-inside:avoid}
+  .nl-sheet{box-shadow:none;border:1px solid var(--line-strong)}
+  .nl-section{break-inside:avoid}
+  .nl-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .nl-period-badge{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 </style>
 </head>
@@ -448,6 +482,7 @@ const S = {
   meetings:[],
   tasks:[],
   notifications:[],
+  newsletters:[],
   notifMenuOpen:false,
   ready:false,
   menuOpen:false,
@@ -658,6 +693,10 @@ function subscribeAll(){
     });
     render();
   },err=>console.error('notifications sub',err)));
+  unsubs.push(onSnapshot(collection(db,'newsletters'),snap=>{
+    S.newsletters=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.period||'').localeCompare(a.period||''));
+    render();
+  },err=>console.error('newsletters sub',err)));
 }
 
 /* ---------------- حالة تسجيل الدخول ---------------- */
@@ -801,6 +840,7 @@ function topbarHtml(){
           <button id="importBtn">${icon('tasks')} استيراد من ملف Excel</button>
           <button data-go="portal-trash">${icon('trash')} سلة المحذوفات</button>
           `:''}
+          <button data-go="portal-newsletters">${icon('doc')} النشرة الشهرية</button>
           <button data-go="portal-account">${icon('id')} حسابي</button>
           <div class="menu-divider"></div>
           <button class="danger" id="logoutBtn">${icon('logout')} تسجيل الخروج</button>
@@ -870,6 +910,9 @@ function render(){
   else if(S.route==='portal-meeting-detail') inner=renderMeetingDetail(S.routeParam);
   else if(S.route==='portal-employees') inner=renderEmployees();
   else if(S.route==='portal-reports') inner=renderReports();
+  else if(S.route==='portal-newsletters') inner=renderNewslettersList();
+  else if(S.route==='portal-newsletter-add') inner=renderNewsletterAdd();
+  else if(S.route==='portal-newsletter-view') inner=renderNewsletterView(S.routeParam);
   else if(S.route==='portal-trash') inner=renderTrash();
   else if(S.route==='portal-account') inner=renderAccount();
   else inner=renderDashboard();
@@ -924,6 +967,9 @@ function wirePortalRoute(){
   else if(S.route==='portal-meeting-detail') wireMeetingDetail(S.routeParam);
   else if(S.route==='portal-employees') wireEmployees();
   else if(S.route==='portal-reports') wireReports();
+  else if(S.route==='portal-newsletters') wireNewslettersList();
+  else if(S.route==='portal-newsletter-add') wireNewsletterAdd();
+  else if(S.route==='portal-newsletter-view') wireNewsletterView(S.routeParam);
   else if(S.route==='portal-trash') wireTrash();
   else if(S.route==='portal-account') wireAccount();
   else if(S.route==='portal-dashboard') wireDashboard();
@@ -3184,6 +3230,335 @@ async function exportReportToExcel(){
     setLoading(btn,false,'<span>'+icon('doc')+' Excel</span>');
     toast('تعذر التصدير، الرجاء التأكد من الاتصال بالإنترنت',true);
   }
+}
+function periodTypeLabel(t){ return t==='quarter'?'ربع سنوي':t==='year'?'سنوي':'شهري'; }
+function renderNewslettersList(){
+  return `
+  <div class="section-title-row"><h2>النشرة الشهرية</h2>
+    ${S.user.role==='lead'?`<button class="btn btn-primary btn-sm" data-go="portal-newsletter-add">${icon('plus')} إصدار جديد</button>`:''}
+  </div>
+  ${S.newsletters.length===0?`<div class="section"><div class="empty-state">${icon('doc')}<h3>لا توجد إصدارات بعد</h3><p>${S.user.role==='lead'?'أنشئي أول إصدار من النشرة':'لم يصدر المشرف أي نشرة بعد'}</p></div></div>`:
+  `<div class="card-grid">${S.newsletters.map(n=>`
+    <div class="grid-card" data-newsletter="${n.id}">
+      <div class="grid-card-top"><span class="badge badge-role-member">${periodTypeLabel(n.periodType)}</span></div>
+      <div class="grid-card-title">${esc(n.periodLabel||n.period)}</div>
+      <div class="grid-card-sub">${(n.photos||[]).length} صورة · ${(n.events||[]).length} فعالية</div>
+    </div>`).join('')}</div>`}
+  `;
+}
+function wireNewslettersList(){
+  $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+  $all('[data-newsletter]').forEach(el=>el.addEventListener('click',()=>go('portal-newsletter-view',el.dataset.newsletter)));
+}
+
+/* ---------- إنشاء إصدار جديد ---------- */
+let nlWilayatCount=1, nlEventsCount=1, nlCoverageCount=1, nlPhotos=[];
+function nlWilayatRowHtml(idx,data){
+  data=data||{};
+  return `<div class="row2" data-wrow="${idx}" style="margin-bottom:8px">
+    <div class="field" style="margin-bottom:0"><input class="input" name="wname_${idx}" value="${esc(data.name||'')}" placeholder="اسم الولاية / المحافظة"></div>
+    <div class="field" style="margin-bottom:0;max-width:120px"><input class="input" type="number" min="0" name="wcount_${idx}" value="${data.count!=null?data.count:''}" placeholder="عدد الزيارات"></div>
+  </div>`;
+}
+function nlEventRowHtml(idx,data){
+  data=data||{};
+  return `<div class="row2" data-erow="${idx}" style="margin-bottom:8px">
+    <div class="field" style="margin-bottom:0"><input class="input" name="ename_${idx}" value="${esc(data.name||'')}" placeholder="اسم الفعالية"></div>
+    <div class="field" style="margin-bottom:0"><input class="input" name="eloc_${idx}" value="${esc(data.location||'')}" placeholder="الموقع"></div>
+  </div>`;
+}
+function nlCoverageRowHtml(idx,data){
+  data=data||{};
+  return `<div class="row2" data-crow="${idx}" style="margin-bottom:8px">
+    <div class="field" style="margin-bottom:0"><input class="input" name="cname_${idx}" value="${esc(data.directorate||'')}" placeholder="المديرية / الجهة"></div>
+    <div class="field" style="margin-bottom:0;max-width:120px"><input class="input" type="number" min="0" name="ccount_${idx}" value="${data.count!=null?data.count:''}" placeholder="العدد"></div>
+  </div>`;
+}
+function renderNewsletterAdd(){
+  if(S.user.role!=='lead') return `<div class="empty-state">${icon('alert')}<h3>هذه الصفحة مخصصة للمشرف فقط</h3></div>`;
+  nlWilayatCount=1; nlEventsCount=1; nlCoverageCount=1; nlPhotos=[];
+  const now=new Date();
+  return `
+  <button class="btn btn-ghost btn-sm" data-go="portal-newsletters" style="margin-bottom:10px">${icon('chev')} رجوع</button>
+  <div class="section-title-row"><h2>إصدار نشرة جديد</h2></div>
+  <form id="nlForm">
+    <div class="section" style="margin-bottom:14px"><div class="section-body">
+      <div class="field"><label>نوع الإصدار</label>
+        <div class="radio-row" id="nlPeriodTypeRow">
+          <button type="button" class="radio-pill on" data-nltype="month">شهري</button>
+          <button type="button" class="radio-pill" data-nltype="quarter">ربع سنوي</button>
+          <button type="button" class="radio-pill" data-nltype="year">سنوي</button>
+        </div>
+        <input type="hidden" name="periodType" value="month">
+      </div>
+      <div id="nlPeriodValueWrap">${nlPeriodValueHtml('month')}</div>
+    </div></div>
+
+    <div class="section" style="margin-bottom:14px">
+      <div class="section-head">${icon('pin')} إجمالي عدد الزيارات حسب الولاية</div>
+      <div class="section-body">
+        <div id="nlWilayatWrap">${nlWilayatRowHtml(0)}</div>
+        <button type="button" class="btn btn-outline btn-sm" id="nlAddWilayat">${icon('plus')} إضافة ولاية</button>
+      </div>
+    </div>
+
+    <div class="section" style="margin-bottom:14px">
+      <div class="section-head">${icon('calendar')} الفعاليات</div>
+      <div class="section-body">
+        <div id="nlEventsWrap">${nlEventRowHtml(0)}</div>
+        <button type="button" class="btn btn-outline btn-sm" id="nlAddEvent">${icon('plus')} إضافة فعالية</button>
+      </div>
+    </div>
+
+    <div class="section" style="margin-bottom:14px">
+      <div class="section-head">${icon('camera')} تغطية المشاريع (حسب المديرية)</div>
+      <div class="section-body">
+        <div id="nlCoverageWrap">${nlCoverageRowHtml(0)}</div>
+        <button type="button" class="btn btn-outline btn-sm" id="nlAddCoverage">${icon('plus')} إضافة مديرية</button>
+      </div>
+    </div>
+
+    <div class="section" style="margin-bottom:14px">
+      <div class="section-head">${icon('film')} صور النشرة</div>
+      <div class="section-body">
+        <div class="check-grid" id="nlPhotosGrid"></div>
+        <input type="file" id="nlPhotoInput" accept="image/*" multiple style="display:none">
+        <button type="button" class="btn btn-outline btn-block" id="nlAddPhotoBtn" style="margin-top:10px">${icon('plus')} إضافة صور</button>
+      </div>
+    </div>
+
+    <button class="btn btn-primary btn-block" type="submit" id="nlSubmitBtn" style="padding:15px">${icon('check')} حفظ وإصدار النشرة</button>
+  </form>
+  `;
+}
+function nlPeriodValueHtml(type){
+  const now=new Date();
+  if(type==='month'){
+    const val=now.toISOString().slice(0,7);
+    return `<div class="field" style="margin-bottom:0"><label>الشهر</label><input class="input" type="month" name="periodValue" value="${val}"></div>`;
+  }
+  if(type==='quarter'){
+    const y=now.getFullYear(), q=currentQuarter();
+    return `<div class="row2">
+      <div class="field" style="margin-bottom:0"><label>السنة</label><select class="input" name="periodYear">${yearOptions().map(yy=>`<option ${yy===y?'selected':''}>${yy}</option>`).join('')}</select></div>
+      <div class="field" style="margin-bottom:0"><label>الربع</label><select class="input" name="periodQuarter">${[1,2,3,4].map(qq=>`<option value="${qq}" ${qq===q?'selected':''}>الربع ${qq}</option>`).join('')}</select></div>
+    </div>`;
+  }
+  const y=now.getFullYear();
+  return `<div class="field" style="margin-bottom:0"><label>السنة</label><select class="input" name="periodYear">${yearOptions().map(yy=>`<option ${yy===y?'selected':''}>${yy}</option>`).join('')}</select></div>`;
+}
+function nlPhotosGridHtml(){
+  return nlPhotos.map((p,i)=>`
+    <div class="check-tile on" style="position:relative;flex-direction:column;align-items:stretch;gap:6px">
+      <img src="${p.dataUrl}" style="width:100%;height:90px;object-fit:cover;border-radius:8px">
+      <input class="input" style="font-size:11px;padding:8px 10px" data-photo-caption="${i}" value="${esc(p.caption||'')}" placeholder="وصف الصورة (اختياري)">
+      <button type="button" data-remove-photo="${i}" style="position:absolute;top:6px;left:6px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;cursor:pointer">${icon('x')}</button>
+    </div>`).join('');
+}
+function wireNewsletterAdd(){
+  if(S.user.role!=='lead') return;
+  $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+  $all('[data-nltype]').forEach(b=>b.addEventListener('click',()=>{
+    $all('[data-nltype]').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    $('#nlForm input[name=periodType]').value=b.dataset.nltype;
+    $('#nlPeriodValueWrap').innerHTML=nlPeriodValueHtml(b.dataset.nltype);
+  }));
+  $('#nlAddWilayat').addEventListener('click',()=>{
+    $('#nlWilayatWrap').insertAdjacentHTML('beforeend', nlWilayatRowHtml(nlWilayatCount));
+    nlWilayatCount++;
+  });
+  $('#nlAddEvent').addEventListener('click',()=>{
+    $('#nlEventsWrap').insertAdjacentHTML('beforeend', nlEventRowHtml(nlEventsCount));
+    nlEventsCount++;
+  });
+  $('#nlAddCoverage').addEventListener('click',()=>{
+    $('#nlCoverageWrap').insertAdjacentHTML('beforeend', nlCoverageRowHtml(nlCoverageCount));
+    nlCoverageCount++;
+  });
+  $('#nlAddPhotoBtn').addEventListener('click',()=>$('#nlPhotoInput').click());
+  $('#nlPhotoInput').addEventListener('change', async(e)=>{
+    const files=Array.from(e.target.files||[]);
+    for(const file of files){
+      try{
+        const dataUrl=await resizeImageFileToDataURL_rect(file, 640, 0.72);
+        nlPhotos.push({dataUrl, caption:''});
+      }catch(err){ console.error(err); }
+    }
+    e.target.value='';
+    refreshNlPhotosGrid();
+  });
+  refreshNlPhotosGrid();
+  $('#nlForm').addEventListener('submit', async(e)=>{
+    e.preventDefault();
+    const fd=new FormData(e.target);
+    const btn=$('#nlSubmitBtn');
+    const periodType=fd.get('periodType')||'month';
+    let period, periodLabel;
+    if(periodType==='month'){
+      const val=fd.get('periodValue');
+      period=val; periodLabel=monthLabel(val);
+    } else if(periodType==='quarter'){
+      const y=fd.get('periodYear'), q=fd.get('periodQuarter');
+      period=`${y}-Q${q}`; periodLabel=`الربع ${q} - ${y}`;
+    } else {
+      const y=fd.get('periodYear');
+      period=y; periodLabel=`سنة ${y}`;
+    }
+    const wilayatVisits=[];
+    $all('[data-wrow]').forEach(row=>{
+      const idx=row.dataset.wrow;
+      const name=fd.get('wname_'+idx), count=fd.get('wcount_'+idx);
+      if(name) wilayatVisits.push({name, count:parseInt(count,10)||0});
+    });
+    const events=[];
+    $all('[data-erow]').forEach(row=>{
+      const idx=row.dataset.erow;
+      const name=fd.get('ename_'+idx), loc=fd.get('eloc_'+idx);
+      if(name) events.push({name, location:loc||''});
+    });
+    const projectCoverage=[];
+    $all('[data-crow]').forEach(row=>{
+      const idx=row.dataset.crow;
+      const name=fd.get('cname_'+idx), count=fd.get('ccount_'+idx);
+      if(name) projectCoverage.push({directorate:name, count:parseInt(count,10)||0});
+    });
+    $all('[data-photo-caption]').forEach(inp=>{
+      const i=parseInt(inp.dataset.photoCaption,10);
+      if(nlPhotos[i]) nlPhotos[i].caption=inp.value;
+    });
+    setLoading(btn,true);
+    try{
+      const ref=await addDoc(collection(db,'newsletters'),{
+        period, periodType, periodLabel, wilayatVisits, events, projectCoverage, photos:nlPhotos,
+        createdBy:S.user.name, createdAt:serverTimestamp()
+      });
+      toast('تم إصدار النشرة بنجاح');
+      go('portal-newsletter-view', ref.id);
+    }catch(err){
+      console.error(err);
+      setLoading(btn,false,'<span>'+icon('check')+' حفظ وإصدار النشرة</span>');
+      toast(err.code==='resource-exhausted'||/longer than.*1048487/.test(err.message||'')?'حجم البيانات كبير جداً، قلّلي عدد الصور أو صغّري حجمها':'تعذر حفظ النشرة',true);
+    }
+  });
+}
+function refreshNlPhotosGrid(){
+  const w=$('#nlPhotosGrid'); if(!w) return;
+  w.innerHTML=nlPhotosGridHtml();
+  $all('[data-remove-photo]').forEach(b=>b.addEventListener('click',()=>{
+    nlPhotos.splice(parseInt(b.dataset.removePhoto,10),1);
+    refreshNlPhotosGrid();
+  }));
+}
+/* نسخة من دالة تصغير الصور تدعم عرضاً مستطيلاً أكبر (لصور النشرة) بدل التربيع الثابت للصورة الرمزية */
+function resizeImageFileToDataURL_rect(file, maxWidth, quality){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error('read-failed'));
+    reader.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error('image-decode-failed'));
+      img.onload=()=>{
+        const ratio=Math.min(1, maxWidth/img.width);
+        const w=Math.round(img.width*ratio), h=Math.round(img.height*ratio);
+        const canvas=document.createElement('canvas');
+        canvas.width=w; canvas.height=h;
+        const ctx=canvas.getContext('2d');
+        ctx.drawImage(img,0,0,w,h);
+        resolve(canvas.toDataURL('image/jpeg', quality||0.75));
+      };
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ---------- عرض / تصدير النشرة ---------- */
+function renderNewsletterView(id){
+  const n=S.newsletters.find(x=>x.id===id);
+  if(!n) return `<div class="empty-state">${icon('alert')}<h3>النشرة غير موجودة</h3></div>`;
+  const totalVisits=(n.wilayatVisits||[]).reduce((s,w)=>s+(w.count||0),0);
+  return `
+  <div class="no-print" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap">
+    <button class="btn btn-ghost btn-sm" data-go="portal-newsletters">${icon('chev')} رجوع</button>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-outline btn-sm" id="printNlBtn">${icon('doc')} تصدير PDF</button>
+      ${S.user.role==='lead'?`<button class="btn btn-danger btn-sm" id="deleteNlBtn">${icon('trash')} حذف</button>`:''}
+    </div>
+  </div>
+  <div class="nl-sheet">
+    <div class="nl-header">
+      <div class="nl-header-bar"></div>
+      <div class="nl-header-row">
+        <div class="nl-title">
+          <h1>النشرة ${periodTypeLabel(n.periodType)}</h1>
+          <p>فريق التصوير — دائرة الفعاليات والتوعية</p>
+        </div>
+        <div class="nl-period-badge">${esc(n.periodLabel||n.period)}</div>
+      </div>
+    </div>
+
+    ${(n.wilayatVisits&&n.wilayatVisits.length)?`
+    <div class="nl-section">
+      <h2>${icon('pin')} إجمالي عدد الزيارات <span class="nl-total">(${totalVisits})</span></h2>
+      <div class="nl-stat-row">
+        ${n.wilayatVisits.map(w=>`
+          <div class="nl-stat-chip">
+            <span class="nl-stat-num">${w.count}</span>
+            <span class="nl-stat-lbl">${esc(w.name)}</span>
+          </div>`).join('')}
+      </div>
+    </div>`:''}
+
+    ${(n.events&&n.events.length)?`
+    <div class="nl-section">
+      <h2>${icon('calendar')} الفعاليات</h2>
+      <ul class="nl-list">
+        ${n.events.map(e=>`<li><strong>${esc(e.name)}</strong>${e.location?` <span class="nl-muted">— ${esc(e.location)}</span>`:''}</li>`).join('')}
+      </ul>
+    </div>`:''}
+
+    ${(n.projectCoverage&&n.projectCoverage.length)?`
+    <div class="nl-section">
+      <h2>${icon('camera')} تغطية المشاريع</h2>
+      <div class="nl-coverage-grid">
+        ${n.projectCoverage.map(c=>`
+          <div class="nl-coverage-item">
+            <span>${esc(c.directorate)}</span>
+            <strong>العدد ${c.count}</strong>
+          </div>`).join('')}
+      </div>
+    </div>`:''}
+
+    ${(n.photos&&n.photos.length)?`
+    <div class="nl-section">
+      <h2>${icon('film')} من ميدان العمل</h2>
+      <div class="nl-photo-grid">
+        ${n.photos.map(p=>`
+          <figure class="nl-photo-frame">
+            <img src="${p.dataUrl}" alt="">
+            ${p.caption?`<figcaption>${esc(p.caption)}</figcaption>`:''}
+          </figure>`).join('')}
+      </div>
+    </div>`:''}
+
+    <div class="nl-footer">دائرة الفعاليات والتوعية — بلدية مسقط · ${esc(n.periodLabel||n.period)}</div>
+  </div>
+  `;
+}
+function wireNewsletterView(id){
+  $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+  const pb=$('#printNlBtn');
+  if(pb) pb.addEventListener('click',()=>window.print());
+  const db2=$('#deleteNlBtn');
+  if(db2) db2.addEventListener('click',async()=>{
+    if(!confirm('حذف هذا الإصدار نهائياً؟')) return;
+    try{
+      await deleteDoc(doc(db,'newsletters',id));
+      toast('تم حذف الإصدار');
+      go('portal-newsletters');
+    }catch(err){ console.error(err); toast('تعذر الحذف',true); }
+  });
 }
 function wireReports(){
   if(S.user.role!=='lead') return;
