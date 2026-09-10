@@ -1325,7 +1325,7 @@ function renderRequestDetail(id){
   const assignedEditors=(r.internal&&r.internal.assignedEditors)||[];
   return `
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-    <button class="btn btn-ghost btn-sm" data-go="portal-requests">${icon('chev')} رجوع للطلبات</button>
+    <button class="btn btn-ghost btn-sm" data-back-nav>${icon('chev')} رجوع للطلبات</button>
     ${(S.user.role==='lead'&&!r.deleted)?`<button class="btn btn-danger btn-sm" id="deleteReqBtn">${icon('trash')} حذف الطلب</button>`:''}
   </div>
   ${r.deleted?`
@@ -1495,6 +1495,7 @@ function renderRequestDetail(id){
 }
 function wireRequestDetail(id){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+  $all('[data-back-nav]').forEach(b=>b.addEventListener('click',()=>history.back()));
   const r=S.requests.find(x=>x.id===id);
   if(!r) return;
   const delBtn=$('#deleteReqBtn');
@@ -1758,7 +1759,7 @@ function renderVisitDetail(id){
   const sites=(v.sites&&v.sites.length)?v.sites:[{}];
   return `
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-    <button class="btn btn-ghost btn-sm" data-go="portal-visits">${icon('chev')} رجوع</button>
+    <button class="btn btn-ghost btn-sm" data-back-nav>${icon('chev')} رجوع</button>
     ${S.user.role==='lead'?`<button class="btn btn-danger btn-sm" id="deleteVisitBtn">${icon('trash')} حذف الزيارة</button>`:''}
   </div>
   ${!v.date?`
@@ -1786,6 +1787,7 @@ function renderVisitDetail(id){
 }
 function wireVisitDetail(id){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+  $all('[data-back-nav]').forEach(b=>b.addEventListener('click',()=>history.back()));
   const v=S.visits.find(x=>x.id===id);
   if(!v) return;
   const sitesCount=(v.sites&&v.sites.length)?v.sites.length:1;
@@ -1946,7 +1948,7 @@ function renderTaskDetail(id){
   if(!t) return `<div class="empty-state">${icon('alert')}<h3>المهمة غير موجودة</h3></div>`;
   return `
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-    <button class="btn btn-ghost btn-sm" data-go="portal-tasks">${icon('chev')} رجوع</button>
+    <button class="btn btn-ghost btn-sm" data-back-nav>${icon('chev')} رجوع</button>
     ${(S.user.role==='lead'&&!t.deleted)?`<button class="btn btn-danger btn-sm" id="deleteTaskBtn">${icon('trash')} حذف المهمة</button>`:''}
   </div>
   ${t.deleted?`
@@ -1977,6 +1979,7 @@ function renderTaskDetail(id){
 }
 function wireTaskDetail(id){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+  $all('[data-back-nav]').forEach(b=>b.addEventListener('click',()=>history.back()));
   wireTaskStatusPills();
   wireEmployeeCheckTiles();
   const t=S.tasks.find(x=>x.id===id);
@@ -2341,7 +2344,7 @@ function renderMeetingDetail(id){
   const attNames=(m.attendees||[]).map(aid=>{const e=S.employees.find(x=>x.id===aid);return e?e.name:null;}).filter(Boolean);
   const extraList=(m.extraAttendees||'').split(',').map(s=>s.trim()).filter(Boolean);
   return `
-  <button class="btn btn-ghost btn-sm" data-go="portal-meetings" style="margin-bottom:10px">${icon('chev')} رجوع</button>
+  <button class="btn btn-ghost btn-sm" data-back-nav>${icon('chev')} رجوع</button>
   <div class="section" style="margin-bottom:14px"><div class="section-body">
     <div style="font-size:17px;font-weight:800;margin-bottom:8px">${esc(m.title)}</div>
     <div class="kv"><span class="k">التاريخ</span><span class="v">${fmtDate(m.date)}</span></div>
@@ -2365,6 +2368,7 @@ function renderMeetingDetail(id){
 }
 function wireMeetingDetail(id){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+  $all('[data-back-nav]').forEach(b=>b.addEventListener('click',()=>history.back()));
   const f=$('#meetingNotesForm');
   if(f) f.addEventListener('submit',async(e)=>{
     e.preventDefault();
@@ -3010,14 +3014,22 @@ function renderAccount(){
   <div class="section" style="margin-bottom:14px">
     <div class="section-head">${icon('id')} البيانات الشخصية</div>
     <div class="section-body">
+      ${S.user.role==='lead'?`
       <form id="profileForm">
         <div class="field"><label>الاسم الثلاثي</label><input class="input" name="name" value="${esc(S.user.name||'')}" required></div>
         <div class="field"><label>المسمى الوظيفي</label><input class="input" name="jobTitle" value="${esc(S.user.jobTitle||'')}" placeholder="مثال: مصور فوتوغرافي"></div>
         <div class="field"><label>الصفة</label><input class="input" name="capacity" value="${esc(S.user.capacity||'')}"></div>
         <div class="kv"><span class="k">الرقم الوظيفي</span><span class="v">${esc(S.user.employeeNumber)}</span></div>
-        <div class="kv" style="margin-bottom:14px"><span class="k">الصلاحية</span><span class="v">${S.user.role==='lead'?'مشرف':'عضو الفريق'}</span></div>
+        <div class="kv" style="margin-bottom:14px"><span class="k">الصلاحية</span><span class="v">مشرف</span></div>
         <button class="btn btn-primary" type="submit">${icon('check')} حفظ البيانات</button>
-      </form>
+      </form>`:`
+      <div class="kv"><span class="k">الاسم الثلاثي</span><span class="v">${esc(S.user.name||'')}</span></div>
+      <div class="kv"><span class="k">المسمى الوظيفي</span><span class="v">${esc(S.user.jobTitle||'—')}</span></div>
+      <div class="kv"><span class="k">الصفة</span><span class="v">${esc(S.user.capacity||'—')}</span></div>
+      <div class="kv"><span class="k">الرقم الوظيفي</span><span class="v">${esc(S.user.employeeNumber)}</span></div>
+      <div class="kv" style="margin-bottom:0"><span class="k">الصلاحية</span><span class="v">عضو الفريق</span></div>
+      <p class="hint" style="margin-top:12px">لتعديل هذه البيانات أو تصحيحها، الرجاء التواصل مع المشرف</p>
+      `}
     </div>
   </div>
   <div class="section"><div class="section-head">${icon('key')} تغيير الرقم السري</div>
@@ -3069,7 +3081,8 @@ function wireAccount(){
       toast('تعذر الحذف',true);
     }
   });
-  $('#profileForm').addEventListener('submit',async(e)=>{
+  const profileForm=$('#profileForm');
+  if(profileForm) profileForm.addEventListener('submit',async(e)=>{
     e.preventDefault();
     const fd=new FormData(e.target);
     const btn=e.target.querySelector('[type=submit]');
