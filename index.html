@@ -724,7 +724,7 @@ function topbarHtml(){
         <div class="topbar-menu" id="topMenu">
           <div style="padding:12px 14px;border-bottom:1px solid var(--line)">
             <div style="font-weight:800;font-size:13.5px">${esc(u.name)}</div>
-            <div class="muted" style="margin-top:2px">${esc(u.employeeNumber)} · ${u.role==='lead'?'مشرف':'عضو الفريق'}</div>
+            <div class="muted" style="margin-top:2px">${esc(u.employeeNumber)} · ${esc(u.capacity||u.jobTitle||(u.role==='lead'?'مشرف':'عضو الفريق'))}</div>
           </div>
           ${u.role==='lead'?`
           <button data-go="portal-employees">${icon('users')} إدارة الموظفين</button>
