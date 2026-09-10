@@ -2477,9 +2477,9 @@ function pwResetStepsHtml(emp){
   <div class="field" style="background:var(--amber-100);border-radius:var(--radius-s);padding:12px 13px;margin-top:12px">
     <div style="font-weight:700;font-size:13px;color:var(--amber-700);margin-bottom:6px">خطوة واحدة يدوية مطلوبة أولاً من Firebase (قيد أمني من Firebase نفسه، لا يمكن تجاوزه)</div>
     <p style="font-size:12.5px;line-height:1.8;color:var(--ink-700)">
-      من Firebase Console ← Authentication ← Users، ابحثي عن<br>
+      من Firebase Console ← Authentication ← Users، بالبحث عن<br>
       <code style="background:#fff;padding:2px 6px;border-radius:4px;font-size:12px">${esc(emp.employeeNumber)}@phototeam-mm.local</code><br>
-      واحذفي هذا الحساب فقط (⋮ ← Delete account) — بيانات الموظف وسجلّه بالمنصة تبقى كما هي. بعدها اضغطي المتابعة بالأسفل.
+      وحذف هذا الحساب فقط (⋮ ← Delete account) — بيانات الموظف وسجلّه بالمنصة تبقى كما هي. ثم الضغط على زر المتابعة بالأسفل.
     </p>
   </div>
   <button type="button" class="btn btn-gold btn-block" id="confirmPwResetBtn" style="margin-top:10px">${icon('check')} استعادة الرقم السري الافتراضي الآن</button>
@@ -2507,7 +2507,7 @@ async function performPasswordReset(emp, btn){
     console.error(err);
     setLoading(btn,false,'<span>'+icon('check')+' استعادة الرقم السري الافتراضي الآن</span>');
     let msg='تعذرت استعادة الرقم السري';
-    if(err.code==='auth/email-already-in-use') msg='الحساب القديم لسه موجود بـ Authentication، تأكدي من حذفه أولاً';
+    if(err.code==='auth/email-already-in-use') msg='الحساب القديم لسه موجود بـ Authentication، الرجاء التأكد من حذفه أولاً';
     toast(msg,true);
     if(secondaryApp){ try{await deleteApp(secondaryApp);}catch(e2){} }
   }
@@ -2845,17 +2845,6 @@ function reportBodyHtml(){
     </div>
   </div>`;
 }
-function empSearchResultsHtml(){
-  const q=(S.filters.reportEmpSearch||'').trim().toLowerCase();
-  if(!q) return '';
-  const matches=S.employees.filter(e=>e.name&&e.name.toLowerCase().includes(q));
-  if(!matches.length) return `<p class="muted" style="margin-top:8px">لا يوجد موظف بهذا الاسم</p>`;
-  return `<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">${matches.map(e=>`
-    <button type="button" class="list-item" style="width:100%;text-align:right;border:1px solid var(--line);border-radius:var(--radius-s);background:#fff" data-select-emp="${e.id}">
-      <div class="avatar-sm">${avatarInner(e)}</div>
-      <div class="list-item-body"><div class="list-item-title">${esc(e.name)}</div><div class="list-item-sub">${esc(e.jobTitle||'')}</div></div>
-    </button>`).join('')}</div>`;
-}
 function renderReports(){
   if(S.user.role!=='lead') return `<div class="empty-state">${icon('alert')}<h3>هذه الصفحة مخصصة للمشرف فقط</h3></div>`;
   if(!S.filters.reportType) S.filters.reportType='month';
@@ -2874,9 +2863,13 @@ function renderReports(){
   </div>
   <div class="section no-print" style="margin-bottom:14px"><div class="section-body">${periodPickerHtml()}</div></div>
   <div class="section no-print" style="margin-bottom:14px"><div class="section-body">
-    <label style="display:block;font-size:13px;font-weight:700;color:var(--ink-700);margin-bottom:6px">${icon('search')} البحث عن موظف لعرض تقريره الشامل</label>
-    <div class="searchbar" style="margin-bottom:0">${icon('search')}<input class="input" id="empSearchInput" placeholder="اكتبي اسم الموظف..." value="${esc(S.filters.reportEmpSearch||'')}"></div>
-    <div id="empSearchResults">${empSearchResultsHtml()}</div>
+    <div class="field" style="margin-bottom:0">
+      <label>${icon('search')} عرض تقرير موظف محدد</label>
+      <select class="input" id="empSelectDropdown">
+        <option value="">-- اختيار موظف --</option>
+        ${S.employees.map(e=>`<option value="${e.id}" ${S.filters.reportSelectedEmpId===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}
+      </select>
+    </div>
   </div></div>
   <div id="reportBody">${reportBodyHtml()}</div>
   `;
@@ -2889,13 +2882,6 @@ function wireReportBodyInteractions(){
   }));
   const backBtn=$('#backToOverviewBtn');
   if(backBtn) backBtn.addEventListener('click',()=>{ S.filters.reportSelectedEmpId=null; render(); });
-}
-function wireEmpSearchResults(){
-  $all('[data-select-emp]').forEach(b=>b.addEventListener('click',()=>{
-    S.filters.reportSelectedEmpId=b.dataset.selectEmp;
-    S.filters.reportEmpSearch='';
-    render();
-  }));
 }
 async function exportReportToExcel(){
   const btn=$('#exportExcelBtn');
@@ -2945,7 +2931,7 @@ async function exportReportToExcel(){
   }catch(err){
     console.error(err);
     setLoading(btn,false,'<span>'+icon('doc')+' Excel</span>');
-    toast('تعذر التصدير، تأكدي من الاتصال بالإنترنت',true);
+    toast('تعذر التصدير، الرجاء التأكد من الاتصال بالإنترنت',true);
   }
 }
 function wireReports(){
@@ -2963,13 +2949,11 @@ function wireReports(){
   if(ys&&qs){ const upd=()=>{ S.filters.reportValue=`${ys.value}-Q${qs.value}`; refreshReportBody(); }; ys.addEventListener('change',upd); qs.addEventListener('change',upd); }
   const yos=$('#reportYearOnlySelect');
   if(yos) yos.addEventListener('change',()=>{ S.filters.reportValue=yos.value; refreshReportBody(); });
-  const empSearch=$('#empSearchInput');
-  if(empSearch) empSearch.addEventListener('input',()=>{
-    S.filters.reportEmpSearch=empSearch.value;
-    $('#empSearchResults').innerHTML=empSearchResultsHtml();
-    wireEmpSearchResults();
+  const empSelect=$('#empSelectDropdown');
+  if(empSelect) empSelect.addEventListener('change',()=>{
+    S.filters.reportSelectedEmpId=empSelect.value||null;
+    render();
   });
-  wireEmpSearchResults();
   wireReportBodyInteractions();
   const pb=$('#printReportBtn');
   if(pb) pb.addEventListener('click',()=>window.print());
