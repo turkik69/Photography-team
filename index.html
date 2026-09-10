@@ -3235,6 +3235,28 @@ async function exportReportToExcel(){
 }
 function periodTypeLabel(t){ return t==='quarter'?'ربع سنوي':t==='year'?'سنوي':'شهري'; }
 function periodTypeTitleLabel(t){ return t==='quarter'?'ربع السنوية':t==='year'?'السنوية':'الشهرية'; }
+/* قوائم مقترحات تتراكم تلقائياً من كل النشرات السابقة (بالإضافة لبذور أولية من نشرتها المرجعية)،
+   تُستخدم كـ datalist بحقول الولاية/المديرية/الفعالية حتى تصير ثابتة ولا تحتاج كتابة من جديد كل مرة */
+function newsletterSuggestions(){
+  const wilayat=new Set(['مسقط','مطرح','بوشر','السيب','العامرات','قريات']);
+  const directorates=new Set(['مسقط','مطرح','بوشر','السيب','العامرات','قريات']);
+  const events=new Set();
+  S.newsletters.forEach(n=>{
+    (n.wilayatVisits||[]).forEach(w=>{ if(w.name) wilayat.add(w.name); });
+    (n.projectCoverage||[]).forEach(c=>{ if(c.directorate) directorates.add(c.directorate); });
+    (n.events||[]).forEach(e=>{ if(e.name) events.add(e.name); });
+  });
+  return { wilayat:[...wilayat], directorates:[...directorates], events:[...events] };
+}
+function nlDatalistsHtml(){
+  const s=newsletterSuggestions();
+  return `
+  <datalist id="nlWilayatOptions">${s.wilayat.map(w=>`<option value="${esc(w)}">`).join('')}</datalist>
+  <datalist id="nlDirectorateOptions">${s.directorates.map(d=>`<option value="${esc(d)}">`).join('')}</datalist>
+  <datalist id="nlEventOptions">${s.events.map(e=>`<option value="${esc(e)}">`).join('')}</datalist>
+  <datalist id="nlCountOptions">${Array.from({length:10},(_,i)=>i+1).map(n=>`<option value="${n}">`).join('')}</datalist>
+  `;
+}
 function renderNewslettersList(){
   return `
   <div class="section-title-row"><h2>النشرة الشهرية</h2>
@@ -3259,22 +3281,22 @@ let nlWilayatCount=1, nlEventsCount=1, nlCoverageCount=1, nlPhotos=[];
 function nlWilayatRowHtml(idx,data){
   data=data||{};
   return `<div class="row2" data-wrow="${idx}" style="margin-bottom:8px">
-    <div class="field" style="margin-bottom:0"><input class="input" name="wname_${idx}" value="${esc(data.name||'')}" placeholder="اسم الولاية / المحافظة"></div>
-    <div class="field" style="margin-bottom:0;max-width:120px"><input class="input" type="number" min="0" name="wcount_${idx}" value="${data.count!=null?data.count:''}" placeholder="عدد الزيارات"></div>
+    <div class="field" style="margin-bottom:0"><input class="input" name="wname_${idx}" value="${esc(data.name||'')}" placeholder="اسم الولاية / المحافظة" list="nlWilayatOptions"></div>
+    <div class="field" style="margin-bottom:0;max-width:120px"><input class="input" type="number" min="0" name="wcount_${idx}" value="${data.count!=null?data.count:''}" placeholder="عدد الزيارات" list="nlCountOptions"></div>
   </div>`;
 }
 function nlEventRowHtml(idx,data){
   data=data||{};
   return `<div class="row2" data-erow="${idx}" style="margin-bottom:8px">
-    <div class="field" style="margin-bottom:0"><input class="input" name="ename_${idx}" value="${esc(data.name||'')}" placeholder="اسم الفعالية"></div>
-    <div class="field" style="margin-bottom:0"><input class="input" name="eloc_${idx}" value="${esc(data.location||'')}" placeholder="الموقع"></div>
+    <div class="field" style="margin-bottom:0"><input class="input" name="ename_${idx}" value="${esc(data.name||'')}" placeholder="اسم الفعالية" list="nlEventOptions"></div>
+    <div class="field" style="margin-bottom:0"><input class="input" name="eloc_${idx}" value="${esc(data.location||'')}" placeholder="الموقع" list="nlWilayatOptions"></div>
   </div>`;
 }
 function nlCoverageRowHtml(idx,data){
   data=data||{};
   return `<div class="row2" data-crow="${idx}" style="margin-bottom:8px">
-    <div class="field" style="margin-bottom:0"><input class="input" name="cname_${idx}" value="${esc(data.directorate||'')}" placeholder="المديرية / الجهة"></div>
-    <div class="field" style="margin-bottom:0;max-width:120px"><input class="input" type="number" min="0" name="ccount_${idx}" value="${data.count!=null?data.count:''}" placeholder="العدد"></div>
+    <div class="field" style="margin-bottom:0"><input class="input" name="cname_${idx}" value="${esc(data.directorate||'')}" placeholder="المديرية / الجهة" list="nlDirectorateOptions"></div>
+    <div class="field" style="margin-bottom:0;max-width:120px"><input class="input" type="number" min="0" name="ccount_${idx}" value="${data.count!=null?data.count:''}" placeholder="العدد" list="nlCountOptions"></div>
   </div>`;
 }
 function renderNewsletterAdd(editId){
@@ -3292,6 +3314,7 @@ function renderNewsletterAdd(editId){
   return `
   <button class="btn btn-ghost btn-sm" id="nlBackBtn" style="margin-bottom:10px">${icon('chev')} رجوع</button>
   <div class="section-title-row"><h2>${existing?'تعديل الإصدار':'إصدار نشرة جديد'}</h2></div>
+  ${nlDatalistsHtml()}
   <form id="nlForm">
     <div class="section" style="margin-bottom:14px"><div class="section-body">
       <div class="field"><label>نوع الإصدار</label>
