@@ -412,6 +412,14 @@ textarea.input{resize:vertical;min-height:78px}
 .nl-coverage-block{padding-bottom:16px;margin-bottom:16px;border-bottom:1px dashed var(--line)}
 .nl-coverage-block:last-child{padding-bottom:0;margin-bottom:0;border-bottom:none}
 
+/* ---------- إكمال تلقائي مخصص (بديل datalist، لأن iOS Safari لا يعرضه بشكل موثوق) ---------- */
+.ac-wrap{position:relative}
+.ac-list{position:absolute;top:100%;right:0;left:0;background:#fff;border:1px solid var(--line-strong);border-radius:var(--radius-s);box-shadow:var(--shadow-2);max-height:190px;overflow-y:auto;z-index:40;margin-top:4px;display:none}
+.ac-list.show{display:block}
+.ac-item{padding:11px 13px;font-size:13px;color:var(--ink-900);cursor:pointer;border-bottom:1px solid var(--line)}
+.ac-item:last-child{border-bottom:none}
+.ac-item:active{background:var(--paper-50)}
+
 /* ---------- Print (reports) ---------- */
 .print-header{display:none}
 @media print{
@@ -3199,14 +3207,43 @@ function newsletterSuggestions(){
   });
   return { wilayat:[...wilayat], directorates:[...directorates], events:[...events] };
 }
-function nlDatalistsHtml(){
+/* إكمال تلقائي مخصص بالكامل (بديل datalist الأصلي، غير موثوق على iOS Safari) — يعمل بالتفويض
+   على مستوى النموذج كامله، فيغطي تلقائياً أي صف يُضاف لاحقاً بدون أي إعادة ربط */
+function wireAutocomplete(formSelector){
+  const form=$(formSelector);
+  if(!form) return;
   const s=newsletterSuggestions();
-  return `
-  <datalist id="nlWilayatOptions">${s.wilayat.map(w=>`<option value="${esc(w)}">`).join('')}</datalist>
-  <datalist id="nlDirectorateOptions">${s.directorates.map(d=>`<option value="${esc(d)}">`).join('')}</datalist>
-  <datalist id="nlEventOptions">${s.events.map(e=>`<option value="${esc(e)}">`).join('')}</datalist>
-  <datalist id="nlCountOptions">${Array.from({length:10},(_,i)=>i+1).map(n=>`<option value="${n}">`).join('')}</datalist>
-  `;
+  const sourceFor=(type)=> type==='wilayat'?s.wilayat : type==='directorate'?s.directorates : type==='event'?s.events : [];
+  function showList(input){
+    const type=input.dataset.acType;
+    const list=input.nextElementSibling;
+    if(!list||!list.classList.contains('ac-list')) return;
+    const q=input.value.trim().toLowerCase();
+    const all=sourceFor(type);
+    const matches=(q?all.filter(v=>v.toLowerCase().includes(q)):all).slice(0,8);
+    if(!matches.length){ list.classList.remove('show'); list.innerHTML=''; return; }
+    list.innerHTML=matches.map(v=>`<div class="ac-item">${esc(v)}</div>`).join('');
+    list.classList.add('show');
+  }
+  form.addEventListener('focusin',(e)=>{ if(e.target.dataset&&e.target.dataset.acType) showList(e.target); });
+  form.addEventListener('input',(e)=>{ if(e.target.dataset&&e.target.dataset.acType) showList(e.target); });
+  form.addEventListener('focusout',(e)=>{
+    if(!(e.target.dataset&&e.target.dataset.acType)) return;
+    const input=e.target;
+    setTimeout(()=>{
+      const list=input.nextElementSibling;
+      if(list&&list.classList.contains('ac-list')) list.classList.remove('show');
+    },180);
+  });
+  form.addEventListener('click',(e)=>{
+    const item=e.target.closest('.ac-item');
+    if(!item) return;
+    const list=item.closest('.ac-list');
+    const input=list.previousElementSibling;
+    input.value=item.textContent;
+    list.classList.remove('show');
+    input.focus();
+  });
 }
 function renderNewslettersList(){
   return `
@@ -3229,18 +3266,24 @@ function wireNewslettersList(){
 
 /* ---------- إنشاء إصدار جديد ---------- */
 let nlWilayatCount=1, nlEventsCount=1, nlCoverageCount=1, nlCoveragePhotos={};
+function acFieldHtml(name, value, placeholder, acType){
+  return `<div class="ac-wrap">
+    <input class="input" name="${name}" value="${esc(value||'')}" placeholder="${placeholder}" data-ac-type="${acType}" autocomplete="off">
+    <div class="ac-list"></div>
+  </div>`;
+}
 function nlWilayatRowHtml(idx,data){
   data=data||{};
   return `<div class="row2" data-wrow="${idx}" style="margin-bottom:8px">
-    <div class="field" style="margin-bottom:0"><input class="input" name="wname_${idx}" value="${esc(data.name||'')}" placeholder="اسم الولاية / المحافظة" list="nlWilayatOptions"></div>
-    <div class="field" style="margin-bottom:0;max-width:120px"><input class="input" type="number" min="0" name="wcount_${idx}" value="${data.count!=null?data.count:''}" placeholder="عدد الزيارات" list="nlCountOptions"></div>
+    <div class="field" style="margin-bottom:0">${acFieldHtml('wname_'+idx, data.name, 'اسم الولاية / المحافظة', 'wilayat')}</div>
+    <div class="field" style="margin-bottom:0;max-width:120px"><input class="input" type="number" min="0" name="wcount_${idx}" value="${data.count!=null?data.count:''}" placeholder="عدد الزيارات"></div>
   </div>`;
 }
 function nlEventRowHtml(idx,data){
   data=data||{};
   return `<div class="row2" data-erow="${idx}" style="margin-bottom:8px">
-    <div class="field" style="margin-bottom:0"><input class="input" name="ename_${idx}" value="${esc(data.name||'')}" placeholder="اسم الفعالية" list="nlEventOptions"></div>
-    <div class="field" style="margin-bottom:0"><input class="input" name="eloc_${idx}" value="${esc(data.location||'')}" placeholder="الموقع" list="nlWilayatOptions"></div>
+    <div class="field" style="margin-bottom:0">${acFieldHtml('ename_'+idx, data.name, 'اسم الفعالية', 'event')}</div>
+    <div class="field" style="margin-bottom:0">${acFieldHtml('eloc_'+idx, data.location, 'الموقع', 'wilayat')}</div>
   </div>`;
 }
 function nlCoverageRowHtml(idx,data){
@@ -3248,8 +3291,8 @@ function nlCoverageRowHtml(idx,data){
   nlCoveragePhotos[idx]=nlCoveragePhotos[idx]||JSON.parse(JSON.stringify(data.photos||[]));
   return `<div class="nl-coverage-block" data-crow="${idx}">
     <div class="row2" style="margin-bottom:8px">
-      <div class="field" style="margin-bottom:0"><input class="input" name="cname_${idx}" value="${esc(data.directorate||'')}" placeholder="المديرية / الجهة" list="nlDirectorateOptions"></div>
-      <div class="field" style="margin-bottom:0;max-width:120px"><input class="input" type="number" min="0" name="ccount_${idx}" value="${data.count!=null?data.count:''}" placeholder="العدد" list="nlCountOptions"></div>
+      <div class="field" style="margin-bottom:0">${acFieldHtml('cname_'+idx, data.directorate, 'المديرية / الجهة', 'directorate')}</div>
+      <div class="field" style="margin-bottom:0;max-width:120px"><input class="input" type="number" min="0" name="ccount_${idx}" value="${data.count!=null?data.count:''}" placeholder="العدد"></div>
     </div>
     <div class="check-grid" data-cphotos-grid="${idx}">${nlCoveragePhotosGridHtml(idx)}</div>
     <input type="file" data-cphoto-input="${idx}" accept="image/*" multiple style="display:none">
@@ -3280,7 +3323,6 @@ function renderNewsletterAdd(editId){
   return `
   <button class="btn btn-ghost btn-sm" id="nlBackBtn" style="margin-bottom:10px">${icon('chev')} رجوع</button>
   <div class="section-title-row"><h2>${existing?'تعديل الإصدار':'إصدار نشرة جديد'}</h2></div>
-  ${nlDatalistsHtml()}
   <form id="nlForm">
     <div class="section" style="margin-bottom:14px"><div class="section-body">
       <div class="field"><label>نوع الإصدار</label>
@@ -3341,6 +3383,7 @@ function nlPeriodValueHtml(type, existing){
 }
 function wireNewsletterAdd(editId){
   if(S.user.role!=='lead') return;
+  wireAutocomplete('#nlForm');
   $('#nlBackBtn').addEventListener('click',()=>{
     if(editId) go('portal-newsletter-view', editId); else go('portal-newsletters');
   });
