@@ -599,7 +599,6 @@ onAuthStateChanged(auth, async (fbUser)=>{
         S.user={id:fbUser.uid,...snap.data()};
         subscribeAll();
         S.ready=true;
-        if(S.user.mustChangePassword){ go('portal-account'); return; }
         if(S.route==='landing'||S.route==='login'){ go('portal-dashboard'); return; }
         render(); return;
       } else if(snap.exists()){
@@ -645,6 +644,42 @@ function initials(name){
   const parts=name.trim().split(/\s+/);
   return parts[0]?parts[0][0]:'؟';
 }
+function avatarInner(emp){
+  if(emp&&emp.photoData) return `<img src="${esc(emp.photoData)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+  return esc(initials(emp&&emp.name));
+}
+function resizeImageFileToDataURL(file, size){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error('read-failed'));
+    reader.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error('image-decode-failed'));
+      img.onload=()=>{
+        const side=Math.min(img.width,img.height);
+        const sx=(img.width-side)/2, sy=(img.height-side)/2;
+        const canvas=document.createElement('canvas');
+        canvas.width=size; canvas.height=size;
+        const ctx=canvas.getContext('2d');
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      };
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+/* ترتيب ثابت لإدارة الموظفين: عادل ثم فاطمة دائماً أولاً (بحسب رقمهم الوظيفي)، والبقية حسب الرقم الوظيفي تصاعدياً */
+const PINNED_EMP_ORDER=['9911','1122'];
+function sortedEmployeesForManagement(){
+  return S.employees.slice().sort((a,b)=>{
+    const ai=PINNED_EMP_ORDER.indexOf(a.employeeNumber), bi=PINNED_EMP_ORDER.indexOf(b.employeeNumber);
+    if(ai!==-1 && bi!==-1) return ai-bi;
+    if(ai!==-1) return -1;
+    if(bi!==-1) return 1;
+    return (a.employeeNumber||'').localeCompare(b.employeeNumber||'', undefined, {numeric:true});
+  });
+}
 function empTileLabel(e){
   return e.jobTitle
     ? `<span style="display:flex;flex-direction:column;line-height:1.35"><span>${esc(e.name)}</span><small class="muted" style="font-size:11px">${esc(e.jobTitle)}</small></span>`
@@ -655,7 +690,7 @@ function employeeCheckGridHtml(namePrefix, selectedNames){
   return S.employees.map(e=>`
     <label class="check-tile ${selectedNames.includes(e.name)?'on':''}" data-tile>
       <input type="checkbox" name="${namePrefix}_${e.id}" ${selectedNames.includes(e.name)?'checked':''}>
-      <span class="avatar-sm">${esc(initials(e.name))}</span>${empTileLabel(e)}
+      <span class="avatar-sm">${avatarInner(e)}</span>${empTileLabel(e)}
     </label>`).join('') || '<p class="muted">لا يوجد موظفون بعد</p>';
 }
 function collectCheckedEmployeeNames(fd, namePrefix){
@@ -676,7 +711,7 @@ function topbarHtml(){
       </div>
       ${u?`
       <div class="topbar-user">
-        <button class="topbar-avatar" id="avatarBtn">${esc(initials(u.name))}</button>
+        <button class="topbar-avatar" id="avatarBtn">${avatarInner(u)}</button>
         ${S.menuOpen?`
         <div class="topbar-menu" id="topMenu">
           <div style="padding:12px 14px;border-bottom:1px solid var(--line)">
@@ -690,7 +725,7 @@ function topbarHtml(){
           <button id="importBtn">${icon('tasks')} استيراد من ملف Excel</button>
           <button data-go="portal-trash">${icon('trash')} سلة المحذوفات</button>
           `:''}
-          <button data-go="portal-account">${icon('key')} تغيير كلمة المرور</button>
+          <button data-go="portal-account">${icon('id')} حسابي</button>
           <div class="menu-divider"></div>
           <button class="danger" id="logoutBtn">${icon('logout')} تسجيل الخروج</button>
         </div>`:''}
@@ -1378,7 +1413,7 @@ function renderRequestDetail(id){
             ${S.employees.map(e=>`
               <label class="check-tile ${assignedPhotographers.includes(e.id)?'on':''}" data-tile>
                 <input type="checkbox" name="photog_${e.id}" ${assignedPhotographers.includes(e.id)?'checked':''}>
-                <span class="avatar-sm">${esc(initials(e.name))}</span>${empTileLabel(e)}
+                <span class="avatar-sm">${avatarInner(e)}</span>${empTileLabel(e)}
               </label>`).join('')||'<p class="muted">لا يوجد موظفون مسجلون بعد</p>'}
           </div>
         </div>
@@ -1388,7 +1423,7 @@ function renderRequestDetail(id){
             ${S.employees.map(e=>`
               <label class="check-tile ${assignedEditors.includes(e.id)?'on':''}" data-tile>
                 <input type="checkbox" name="editor_${e.id}" ${assignedEditors.includes(e.id)?'checked':''}>
-                <span class="avatar-sm">${esc(initials(e.name))}</span>${empTileLabel(e)}
+                <span class="avatar-sm">${avatarInner(e)}</span>${empTileLabel(e)}
               </label>`).join('')||'<p class="muted">لا يوجد موظفون مسجلون بعد</p>'}
           </div>
         </div>
@@ -2257,7 +2292,7 @@ function renderMeetingAdd(){
       <div class="field">
         <label>الحضور من الفريق</label>
         <div class="check-grid">
-          ${S.employees.map(e=>`<label class="check-tile" data-tile><input type="checkbox" name="att_${e.id}"><span class="avatar-sm">${esc(initials(e.name))}</span>${empTileLabel(e)}</label>`).join('')||'<p class="muted">لا يوجد موظفون بعد</p>'}
+          ${S.employees.map(e=>`<label class="check-tile" data-tile><input type="checkbox" name="att_${e.id}"><span class="avatar-sm">${avatarInner(e)}</span>${empTileLabel(e)}</label>`).join('')||'<p class="muted">لا يوجد موظفون بعد</p>'}
         </div>
       </div>
       <div class="field"><label>حضور إضافي (خارج الفريق)</label><input class="input" name="extraAttendees" placeholder="أسماء مفصولة بفاصلة"></div>
@@ -2348,9 +2383,9 @@ function renderEmployees(){
   </div>
   <div class="section">
     ${S.employees.length===0?`<div class="empty-state">${icon('users')}<h3>لا يوجد موظفون بعد</h3></div>`:
-      S.employees.map(e=>`
+      sortedEmployeesForManagement().map(e=>`
       <div class="list-item" style="cursor:default">
-        <div class="avatar-sm" style="width:38px;height:38px;font-size:14px">${esc(initials(e.name))}</div>
+        <div class="avatar-sm" style="width:38px;height:38px;font-size:14px">${avatarInner(e)}</div>
         <div class="list-item-body">
           <div class="list-item-title">${esc(e.name)} ${e.active===false?'<span class="muted">(معطّل)</span>':''}</div>
           <div class="list-item-sub">
@@ -2639,7 +2674,7 @@ function reportBodyHtml(){
     <div class="section-body" style="padding:0">
       ${stats.perEmp.map(row=>`
         <div class="list-item" style="cursor:default">
-          <div class="avatar-sm" style="width:36px;height:36px">${esc(initials(row.emp.name))}</div>
+          <div class="avatar-sm" style="width:36px;height:36px">${avatarInner(row.emp)}</div>
           <div class="list-item-body">
             <div class="list-item-title">${esc(row.emp.name)}</div>
             <div class="list-item-sub">${row.asPhotog} تصوير · ${row.asEditor} مونتاج · ${row.visitsLogged} زيارة · ${row.meetingsAttended} اجتماع</div>
@@ -2714,6 +2749,17 @@ function renderAccount(){
     </div>
   </div>`:''}
   <div class="section" style="margin-bottom:14px">
+    <div class="section-body" style="display:flex;align-items:center;gap:16px">
+      <div class="avatar-sm" style="width:64px;height:64px;font-size:22px">${avatarInner(S.user)}</div>
+      <div style="flex:1">
+        <button type="button" class="btn btn-outline btn-sm" id="changePhotoBtn">${icon('edit')} تغيير الصورة</button>
+        ${S.user.photoData?`<button type="button" class="btn btn-ghost btn-sm" id="removePhotoBtn">إزالة</button>`:''}
+        <input type="file" id="photoFileInput" accept="image/*" style="display:none">
+        <div class="hint" style="margin-top:6px">صورة مربعة بجودة جيدة تعطي أفضل نتيجة</div>
+      </div>
+    </div>
+  </div>
+  <div class="section" style="margin-bottom:14px">
     <div class="section-head">${icon('id')} البيانات الشخصية</div>
     <div class="section-body">
       <form id="profileForm">
@@ -2742,6 +2788,39 @@ function renderAccount(){
   </div>`;
 }
 function wireAccount(){
+  $('#changePhotoBtn').addEventListener('click',()=>$('#photoFileInput').click());
+  $('#photoFileInput').addEventListener('change', async (e)=>{
+    const file=e.target.files[0];
+    if(!file) return;
+    const btn=$('#changePhotoBtn');
+    setLoading(btn,true);
+    try{
+      const dataUrl=await resizeImageFileToDataURL(file, 200);
+      if(dataUrl.length>900000){ throw new Error('too-large'); }
+      await updateDoc(doc(db,'employees',S.user.id),{photoData:dataUrl});
+      S.user.photoData=dataUrl;
+      toast('تم تحديث الصورة بنجاح');
+      render();
+    }catch(err){
+      console.error(err);
+      setLoading(btn,false,'<span>'+icon('edit')+' تغيير الصورة</span>');
+      toast(err.message==='too-large'?'الصورة كبيرة جداً، جرّبي صورة أخرى':'تعذر رفع الصورة',true);
+    }
+  });
+  const rmBtn=$('#removePhotoBtn');
+  if(rmBtn) rmBtn.addEventListener('click',async()=>{
+    setLoading(rmBtn,true);
+    try{
+      await updateDoc(doc(db,'employees',S.user.id),{photoData:''});
+      S.user.photoData='';
+      toast('تمت إزالة الصورة');
+      render();
+    }catch(err){
+      console.error(err);
+      setLoading(rmBtn,false,'إزالة');
+      toast('تعذر الحذف',true);
+    }
+  });
   $('#profileForm').addEventListener('submit',async(e)=>{
     e.preventDefault();
     const fd=new FormData(e.target);
