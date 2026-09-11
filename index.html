@@ -2321,6 +2321,55 @@ function wireTrash(){
    يفتح منتقي الملفات الأصلي لنظام التشغيل (سطح المكتب أو أي مجلد)
    ============================================================ */
 let XLSXLib=null, pendingImportData=null, importFileType='visits';
+async function saveNewsletterPhotos(newsletterId){
+  /* تبسيطاً: نحذف كل صور هذه النشرة الحالية بقاعدة البيانات، ثم نكتب الصور الحالية بالنموذج كمستندات جديدة مستقلة —
+     كل صورة بمستند خاص بها بدل تكديسها كلها بحقل واحد، حتى لا تصطدم بحد فايرستور الأقصى (1MB) لحجم المستند الواحد */
+  const existingSnap=await getDocs(query(collection(db,'newsletterPhotos'), where('newsletterId','==',newsletterId)));
+  await Promise.all(existingSnap.docs.map(d=>deleteDoc(d.ref)));
+  const writes=[];
+  Object.keys(nlCoveragePhotos).forEach(idx=>{
+    (nlCoveragePhotos[idx]||[]).forEach((p,order)=>{
+      writes.push(addDoc(collection(db,'newsletterPhotos'),{newsletterId, kind:'coverage', idx:parseInt(idx,10), order, dataUrl:p.dataUrl, caption:p.caption||''}));
+    });
+  });
+  Object.keys(nlEventPhotos).forEach(idx=>{
+    (nlEventPhotos[idx]||[]).forEach((p,order)=>{
+      writes.push(addDoc(collection(db,'newsletterPhotos'),{newsletterId, kind:'event', idx:parseInt(idx,10), order, dataUrl:p.dataUrl, caption:p.caption||''}));
+    });
+  });
+  await Promise.all(writes);
+}
+async function fetchNewsletterPhotos(newsletterId){
+  const snap=await getDocs(query(collection(db,'newsletterPhotos'), where('newsletterId','==',newsletterId)));
+  const byKindIdx={coverage:{}, event:{}};
+  snap.docs.forEach(d=>{
+    const p=d.data();
+    const bucket=byKindIdx[p.kind]||(byKindIdx[p.kind]={});
+    (bucket[p.idx]=bucket[p.idx]||[]).push({dataUrl:p.dataUrl, caption:p.caption||'', order:p.order||0});
+  });
+  Object.keys(byKindIdx).forEach(k=>{
+    Object.keys(byKindIdx[k]).forEach(idx=>{ byKindIdx[k][idx].sort((a,b)=>a.order-b.order); });
+  });
+  return byKindIdx;
+}
+async function loadExistingNewsletterPhotosIntoForm(editId){
+  try{
+    const photos=await fetchNewsletterPhotos(editId);
+    Object.keys(photos.coverage||{}).forEach(idx=>{
+      nlCoveragePhotos[idx]=photos.coverage[idx];
+      const grid=$(`[data-cphotos-grid="${idx}"]`);
+      if(grid) grid.innerHTML=nlCoveragePhotosGridHtml(idx);
+    });
+    Object.keys(photos.event||{}).forEach(idx=>{
+      nlEventPhotos[idx]=photos.event[idx];
+      const grid=$(`[data-ephotos-grid="${idx}"]`);
+      if(grid) grid.innerHTML=nlEventPhotosGridHtml(idx);
+    });
+  }catch(err){
+    console.error(err);
+    toast('تعذر تحميل صور هذا الإصدار',true);
+  }
+}
 async function ensureXLSXLoaded(){
   if(XLSXLib) return XLSXLib;
   XLSXLib = await import('https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs');
@@ -3230,6 +3279,13 @@ async function exportReportToExcel(){
 }
 function periodTypeLabel(t){ return t==='quarter'?'ربع سنوي':t==='year'?'سنوي':'شهري'; }
 function periodTypeTitleLabel(t){ return t==='quarter'?'ربع السنوية':t==='year'?'السنوية':'الشهرية'; }
+function nlViewPhotoGridInnerHtml(photos){
+  return (photos||[]).map(p=>`
+    <figure class="nl-photo-frame">
+      <img src="${p.dataUrl}" alt="">
+      ${p.caption?`<figcaption>${esc(p.caption)}</figcaption>`:''}
+    </figure>`).join('');
+}
 /* قوائم مقترحات تتراكم تلقائياً من كل النشرات السابقة (بالإضافة لبذور أولية من نشرتها المرجعية)،
    تُستخدم كـ datalist بحقول الولاية/المديرية/الفعالية حتى تصير ثابتة ولا تحتاج كتابة من جديد كل مرة */
 function newsletterSuggestions(){
@@ -3436,6 +3492,7 @@ function nlPeriodValueHtml(type, existing){
 function wireNewsletterAdd(editId){
   if(S.user.role!=='lead') return;
   wireAutocomplete('#nlForm');
+  if(editId) loadExistingNewsletterPhotosIntoForm(editId);
   $('#nlBackBtn').addEventListener('click',()=>{
     if(editId) go('portal-newsletter-view', editId); else go('portal-newsletters');
   });
@@ -3553,35 +3610,36 @@ function wireNewsletterAdd(editId){
     $all('[data-erow]').forEach(row=>{
       const idx=row.dataset.erow;
       const name=fd.get('ename_'+idx), loc=fd.get('eloc_'+idx);
-      if(name) events.push({name, location:loc||'', photos:nlEventPhotos[idx]||[]});
+      if(name) events.push({name, location:loc||''});
     });
     const projectCoverage=[];
     $all('[data-crow]').forEach(row=>{
       const idx=row.dataset.crow;
       const name=fd.get('cname_'+idx), count=fd.get('ccount_'+idx);
-      if(name) projectCoverage.push({directorate:name, count:parseInt(count,10)||0, photos:nlCoveragePhotos[idx]||[]});
+      if(name) projectCoverage.push({directorate:name, count:parseInt(count,10)||0});
     });
     setLoading(btn,true);
     try{
+      let newsletterId=editId;
       if(editId){
         await updateDoc(doc(db,'newsletters',editId),{
           period, periodType, periodLabel, wilayatVisits, events, projectCoverage,
           updatedAt:serverTimestamp()
         });
-        toast('تم حفظ التعديلات بنجاح');
-        go('portal-newsletter-view', editId);
       } else {
         const ref=await addDoc(collection(db,'newsletters'),{
           period, periodType, periodLabel, wilayatVisits, events, projectCoverage,
           createdBy:S.user.name, createdAt:serverTimestamp()
         });
-        toast('تم إصدار النشرة بنجاح');
-        go('portal-newsletter-view', ref.id);
+        newsletterId=ref.id;
       }
+      await saveNewsletterPhotos(newsletterId);
+      toast(editId?'تم حفظ التعديلات بنجاح':'تم إصدار النشرة بنجاح');
+      go('portal-newsletter-view', newsletterId);
     }catch(err){
       console.error(err);
       setLoading(btn,false,'<span>'+icon('check')+' '+(editId?'حفظ التعديلات':'حفظ وإصدار النشرة')+'</span>');
-      toast(err.code==='resource-exhausted'||/longer than.*1048487/.test(err.message||'')?'حجم البيانات كبير جداً، قلّلي عدد الصور أو صغّري حجمها':'تعذر حفظ النشرة',true);
+      toast('تعذر حفظ النشرة، تأكدي من الاتصال بالإنترنت وحاولي مجدداً',true);
     }
   });
 }
@@ -3655,19 +3713,12 @@ function renderNewsletterView(id){
     <div class="nl-section">
       <h2>${icon('calendar')} الفعاليات</h2>
       <div class="nl-coverage-list">
-        ${n.events.map(e=>`
+        ${n.events.map((e,ei)=>`
           <div class="nl-coverage-card">
             <div class="nl-coverage-card-head">
               <span><strong>${esc(e.name)}</strong>${e.location?` <span class="nl-muted">— ${esc(e.location)}</span>`:''}</span>
             </div>
-            ${(e.photos&&e.photos.length)?`
-            <div class="nl-photo-grid">
-              ${e.photos.map(p=>`
-                <figure class="nl-photo-frame">
-                  <img src="${p.dataUrl}" alt="">
-                  ${p.caption?`<figcaption>${esc(p.caption)}</figcaption>`:''}
-                </figure>`).join('')}
-            </div>`:''}
+            <div class="nl-photo-grid" data-view-ephotos="${ei}"></div>
           </div>`).join('')}
       </div>
     </div>`:''}
@@ -3676,20 +3727,13 @@ function renderNewsletterView(id){
     <div class="nl-section">
       <h2>${icon('camera')} تغطية المشاريع</h2>
       <div class="nl-coverage-list">
-        ${n.projectCoverage.map(c=>`
+        ${n.projectCoverage.map((c,ci)=>`
           <div class="nl-coverage-card">
             <div class="nl-coverage-card-head">
               <span>${esc(c.directorate)}</span>
               <strong>العدد ${c.count}</strong>
             </div>
-            ${(c.photos&&c.photos.length)?`
-            <div class="nl-photo-grid">
-              ${c.photos.map(p=>`
-                <figure class="nl-photo-frame">
-                  <img src="${p.dataUrl}" alt="">
-                  ${p.caption?`<figcaption>${esc(p.caption)}</figcaption>`:''}
-                </figure>`).join('')}
-            </div>`:''}
+            <div class="nl-photo-grid" data-view-cphotos="${ci}"></div>
           </div>`).join('')}
       </div>
     </div>`:''}
@@ -3700,6 +3744,16 @@ function renderNewsletterView(id){
 }
 function wireNewsletterView(id){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+  fetchNewsletterPhotos(id).then(photos=>{
+    Object.keys(photos.coverage||{}).forEach(idx=>{
+      const grid=$(`[data-view-cphotos="${idx}"]`);
+      if(grid) grid.innerHTML=nlViewPhotoGridInnerHtml(photos.coverage[idx]);
+    });
+    Object.keys(photos.event||{}).forEach(idx=>{
+      const grid=$(`[data-view-ephotos="${idx}"]`);
+      if(grid) grid.innerHTML=nlViewPhotoGridInnerHtml(photos.event[idx]);
+    });
+  }).catch(err=>console.error(err));
   const pb=$('#printNlBtn');
   if(pb) pb.addEventListener('click',()=>window.print());
   const pngb=$('#pngNlBtn');
@@ -3713,6 +3767,8 @@ function wireNewsletterView(id){
   if(db2) db2.addEventListener('click',async()=>{
     if(!confirm('حذف هذا الإصدار نهائياً؟')) return;
     try{
+      const photosSnap=await getDocs(query(collection(db,'newsletterPhotos'), where('newsletterId','==',id)));
+      await Promise.all(photosSnap.docs.map(d=>deleteDoc(d.ref)));
       await deleteDoc(doc(db,'newsletters',id));
       toast('تم حذف الإصدار');
       go('portal-newsletters');
