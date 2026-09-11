@@ -401,10 +401,10 @@ textarea.input{resize:vertical;min-height:78px}
 .nl-coverage-card-head strong{color:var(--green-800);font-size:12px}
 .nl-coverage-card .nl-photo-grid{margin-top:12px}
 .nl-coverage-item strong{color:var(--green-800);font-size:12px}
-.nl-photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
-.nl-photo-frame{margin:0;border:6px solid #fff;outline:2px solid var(--gold-500);border-radius:6px;box-shadow:var(--shadow-1);overflow:hidden;break-inside:avoid}
-.nl-photo-frame img{width:100%;height:150px;object-fit:cover;display:block}
-.nl-photo-frame figcaption{padding:7px 9px;font-size:10.5px;color:var(--ink-500);text-align:center;background:#fff}
+.nl-photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:9px}
+.nl-photo-frame{margin:0;border:4px solid #fff;outline:1.5px solid var(--gold-500);border-radius:5px;box-shadow:var(--shadow-1);overflow:hidden;break-inside:avoid}
+.nl-photo-frame img{width:100%;height:92px;object-fit:cover;display:block}
+.nl-photo-frame figcaption{padding:5px 7px;font-size:9.5px;color:var(--ink-500);text-align:center;background:#fff}
 .nl-footer{padding:16px 22px;text-align:center;font-size:10.5px;color:var(--ink-500);background:var(--paper-50)}
 .nl-coverage-block{padding-bottom:16px;margin-bottom:16px;border-bottom:1px dashed var(--line)}
 .nl-coverage-block:last-child{padding-bottom:0;margin-bottom:0;border-bottom:none}
@@ -419,20 +419,21 @@ textarea.input{resize:vertical;min-height:78px}
 
 /* ---------- Print (reports) ---------- */
 .print-header{display:none}
+/* هذي تُستخدم بأي سياق يظهر فيه الرأس (سواء طباعة فعلية أو التقاط برمجي)، فهي دائماً فعّالة بغض النظر عن الطريقة */
+.exporting-pdf .print-header{
+  display:flex!important;align-items:center;gap:12px;margin-bottom:16px;
+  padding-bottom:12px;border-bottom:2px solid var(--green-800);
+}
+.print-header img{width:46px;height:46px;border-radius:50%;flex:none;object-fit:cover}
+.print-header h2{font-size:16px;color:var(--green-900)}
+.print-header p{font-size:11px;color:var(--ink-500);margin-top:2px}
 /* تُستخدم مؤقتاً أثناء التقاط الصفحة برمجياً لتصدير PDF (بدل طباعة المتصفح)، فتُظهر رأس الطباعة وتُخفي عناصر التحكم بنفس منطق @media print أدناه */
 .exporting-pdf .no-print{display:none!important}
-.exporting-pdf .print-header{display:flex!important}
 @media print{
   @page{ size:A4; margin:14mm; }
   .topbar,.bottomnav,.no-print,.fab{display:none!important}
   body{background:#fff}
-  .print-header{
-    display:flex!important;align-items:center;gap:12px;margin-bottom:16px;
-    padding-bottom:12px;border-bottom:2px solid var(--green-800);
-  }
-  .print-header img{width:46px;height:46px;border-radius:50%}
-  .print-header h2{font-size:16px;color:var(--green-900)}
-  .print-header p{font-size:11px;color:var(--ink-500);margin-top:2px}
+  .print-header{display:flex!important}
   .section{break-inside:avoid;box-shadow:none;border:1px solid var(--line-strong)}
   .list-item{break-inside:avoid}
   .grid-card{break-inside:avoid}
@@ -3352,36 +3353,84 @@ async function exportReportToExcel(){
       const emp=S.employees.find(e=>e.id===S.filters.reportSelectedEmpId);
       if(emp){
         const d=computeEmployeeDetail(emp.id, emp.name, period.start, period.end);
-        const rows=[['النوع','العنوان','التاريخ','ملاحظة']];
-        d.reqAsPhotog.forEach(r=>rows.push(['طلب (تصوير)', (r.event&&r.event.name)||'', (r.event&&r.event.date)||'', r.requestNumber||'']));
-        d.reqAsEditor.forEach(r=>rows.push(['طلب (مونتاج)', (r.event&&r.event.name)||'', (r.event&&r.event.date)||'', r.requestNumber||'']));
-        d.visitsConducted.forEach(v=>rows.push(['زيارة', (v.sites||[]).map(s=>s.projectName).join('، '), v.date||'', '']));
-        d.meetingsAttended.forEach(m=>rows.push(['اجتماع', m.title||'', m.date||'', '']));
-        d.tasksResponsible.forEach(t=>rows.push(['مهمة', t.title||'', t.startDate||'', taskStatusLabel(t.status)]));
+        /* نفس ترتيب صفحة تقرير الموظف بالمنصة: بيانات الموظف، ثم بطاقات الأعداد، ثم كل قسم بترتيبه */
+        const rows=[
+          [`تقرير أداء ${emp.name}`],
+          [`دائرة الفعاليات والتوعية - بلدية مسقط`],
+          [`الفترة: ${period.label}`],
+          [],
+          [`${emp.jobTitle||''}${emp.capacity?' - '+emp.capacity:''}`],
+          [],
+          ['طلبات كمصور', d.reqAsPhotog.length, '', 'طلبات كمونتير', d.reqAsEditor.length],
+          ['زيارات', d.visitsConducted.length, '', 'اجتماعات', d.meetingsAttended.length],
+          [],
+        ];
+        const reqMap=new Map();
+        d.reqAsPhotog.forEach(r=>reqMap.set(r.id,{r,photog:true,editor:false}));
+        d.reqAsEditor.forEach(r=>{ const ex=reqMap.get(r.id); if(ex) ex.editor=true; else reqMap.set(r.id,{r,photog:false,editor:true}); });
+        if(reqMap.size){
+          rows.push(['طلبات التصوير']);
+          rows.push(['العنوان','رقم الطلب','التاريخ','الدور']);
+          [...reqMap.values()].forEach(({r,photog,editor})=>{
+            const role=photog&&editor?'تصوير ومونتاج':photog?'تصوير':'مونتاج';
+            rows.push([(r.event&&r.event.name)||'', r.requestNumber||'', (r.event&&r.event.date)||'', role]);
+          });
+          rows.push([]);
+        }
+        if(d.visitsConducted.length){
+          rows.push(['الزيارات']);
+          rows.push(['التاريخ','المواقع']);
+          d.visitsConducted.forEach(v=>rows.push([v.date?fmtDate(v.date):'بدون تاريخ', (v.sites||[]).map(s=>s.projectName).join('، ')]));
+          rows.push([]);
+        }
+        if(d.meetingsAttended.length){
+          rows.push(['الاجتماعات']);
+          rows.push(['العنوان','التاريخ']);
+          d.meetingsAttended.forEach(m=>rows.push([m.title||'', fmtDateShort(m.date)]));
+          rows.push([]);
+        }
+        if(d.tasksResponsible.length){
+          rows.push(['المهام والمشاريع']);
+          rows.push(['العنوان','الحالة']);
+          d.tasksResponsible.forEach(t=>rows.push([t.title||'', taskStatusLabel(t.status)]));
+        }
         const ws=XLSX.utils.aoa_to_sheet(rows);
+        ws['!cols']=[{wch:34},{wch:16},{wch:14},{wch:16},{wch:12}];
+        ws['!views']=[{rightToLeft:true}];
         XLSX.utils.book_append_sheet(wb, ws, (emp.name||'تقرير').slice(0,28));
         XLSX.writeFile(wb, `تقرير-${emp.name}-${period.label}.xlsx`);
       }
     } else {
       const stats=computeReportStats(period.start, period.end);
-      const summaryRows=[
-        ['التقرير', `تقرير فريق التصوير - ${period.label}`],
-        ['إجمالي الطلبات', stats.reqTotal],
-        ['طلبات عاجلة', stats.reqByPriority.urgent],
-        ['أيام الزيارات', stats.visitDays],
-        ['إجمالي المواقع', stats.totalSiteVisits],
+      /* نفس ترتيب صفحة التقارير بالمنصة بالضبط: بطاقات الأعداد، ثم كل رسم بياني بترتيبه، ثم الجدول التفصيلي */
+      const rows=[
+        [`تقرير فريق التصوير`],
+        [`دائرة الفعاليات والتوعية - بلدية مسقط`],
+        [`الفترة: ${period.label}`],
+        [],
+        ['طلبات التصوير', stats.reqTotal, '', 'طلبات عاجلة', stats.reqByPriority.urgent],
+        ['أيام الزيارات', stats.visitDays, '', 'إجمالي المواقع', stats.totalSiteVisits],
         ['الاجتماعات', stats.meetingsTotal],
+        [],
+        ['الطلبات حسب الحالة'],
+        ['الحالة','العدد'],
       ];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), 'ملخص');
-      const statusRows=[['الحالة','العدد']];
-      ['submitted','received','assigned','completed'].forEach(s=>statusRows.push([statusLabel(s), stats.reqByStatus[s]]));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(statusRows), 'الطلبات حسب الحالة');
-      const typeRows=[['نوع المهمة','العدد']];
-      Object.entries(stats.byTaskType).forEach(([t,c])=>typeRows.push([t,c]));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(typeRows), 'الزيارات حسب النوع');
-      const empRows=[['الموظف','طلبات (تصوير)','طلبات (مونتاج)','زيارات','اجتماعات','الإجمالي']];
-      stats.perEmp.forEach(row=>empRows.push([row.emp.name, row.asPhotog, row.asEditor, row.visitsLogged, row.meetingsAttended, row.total]));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(empRows), 'أداء الموظفين');
+      ['submitted','received','assigned','completed'].forEach(s=>rows.push([statusLabel(s), stats.reqByStatus[s]]));
+      rows.push([]);
+      const typeEntries=Object.entries(stats.byTaskType).sort((a,b)=>b[1]-a[1]);
+      if(typeEntries.length){
+        rows.push(['الزيارات حسب نوع المهمة']);
+        rows.push(['نوع المهمة','العدد']);
+        typeEntries.forEach(([t,c])=>rows.push([t,c]));
+        rows.push([]);
+      }
+      rows.push(['أداء الموظفين وإنجازاتهم']);
+      rows.push(['الموظف','طلبات (تصوير)','طلبات (مونتاج)','زيارات','اجتماعات','الإجمالي']);
+      stats.perEmp.forEach(row=>rows.push([row.emp.name, row.asPhotog, row.asEditor, row.visitsLogged, row.meetingsAttended, row.total]));
+      const ws=XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols']=[{wch:30},{wch:16},{wch:14},{wch:14},{wch:12},{wch:12}];
+      ws['!views']=[{rightToLeft:true}];
+      XLSX.utils.book_append_sheet(wb, ws, 'تقرير فريق التصوير');
       XLSX.writeFile(wb, `تقرير-فريق-التصوير-${period.label}.xlsx`);
     }
     setLoading(btn,false,'<span>'+icon('doc')+' Excel</span>');
