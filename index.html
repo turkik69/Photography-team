@@ -657,13 +657,16 @@ function authErrorMessage(err){
 }
 
 /* التوجيه Router */
+let formInProgress=false; /* يمنع إعادة رسم الصفحة كاملة بسبب تحديثات لحظية غير متعلقة، بينما المستخدم يعبّئ نموذجاً طويلاً فيه بيانات غير محفوظة (كنموذج النشرة) — يُصفّر تلقائياً مع أي تنقّل */
 function go(route,param){
+  formInProgress=false;
   S.route=route; S.routeParam=param; S.menuOpen=false;
   location.hash='#'+route+(param?('/'+param):'');
   window.scrollTo(0,0);
   render();
 }
 window.addEventListener('hashchange',()=>{
+  formInProgress=false;
   const h=location.hash.replace('#','');
   const [r,p]=h.split('/');
   S.route=r||'landing'; S.routeParam=p||null;
@@ -677,23 +680,23 @@ function subscribeAll(){
   clearSubs();
   unsubs.push(onSnapshot(query(collection(db,'employees'),orderBy('name')),snap=>{
     S.employees=snap.docs.map(d=>({id:d.id,...d.data()}));
-    render();
+    if(!formInProgress) render();
   },err=>console.error('employees sub',err)));
   unsubs.push(onSnapshot(query(collection(db,'requests'),orderBy('createdAt','desc')),snap=>{
     S.requests=snap.docs.map(d=>({id:d.id,...d.data()}));
-    render();
+    if(!formInProgress) render();
   },err=>console.error('requests sub',err)));
   unsubs.push(onSnapshot(query(collection(db,'visits'),orderBy('date','desc')),snap=>{
     S.visits=snap.docs.map(d=>({id:d.id,...d.data()}));
-    render();
+    if(!formInProgress) render();
   },err=>console.error('visits sub',err)));
   unsubs.push(onSnapshot(query(collection(db,'meetings'),orderBy('date','desc')),snap=>{
     S.meetings=snap.docs.map(d=>({id:d.id,...d.data()}));
-    render();
+    if(!formInProgress) render();
   },err=>console.error('meetings sub',err)));
   unsubs.push(onSnapshot(query(collection(db,'tasks'),orderBy('startDate','desc')),snap=>{
     S.tasks=snap.docs.map(d=>({id:d.id,...d.data()}));
-    render();
+    if(!formInProgress) render();
   },err=>console.error('tasks sub',err)));
   unsubs.push(onSnapshot(query(collection(db,'notifications'),where('toEmployeeId','==',S.user.id)),snap=>{
     S.notifications=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>{
@@ -701,11 +704,11 @@ function subscribeAll(){
       const bt=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;
       return bt-at;
     });
-    render();
+    if(!formInProgress) render();
   },err=>console.error('notifications sub',err)));
   unsubs.push(onSnapshot(collection(db,'newsletters'),snap=>{
     S.newsletters=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.period||'').localeCompare(a.period||''));
-    render();
+    if(!formInProgress) render();
   },err=>console.error('newsletters sub',err)));
 }
 
@@ -3491,6 +3494,7 @@ function nlPeriodValueHtml(type, existing){
 }
 function wireNewsletterAdd(editId){
   if(S.user.role!=='lead') return;
+  formInProgress=true;
   wireAutocomplete('#nlForm');
   if(editId) loadExistingNewsletterPhotosIntoForm(editId);
   $('#nlBackBtn').addEventListener('click',()=>{
