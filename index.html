@@ -262,12 +262,12 @@ textarea.input{resize:vertical;min-height:78px}
 .empty-state{padding:44px 20px;text-align:center;color:var(--ink-500)}
 
 /* ---------- Bar charts (تقارير) ---------- */
-.bar-chart{display:flex;flex-direction:column;gap:11px}
-.bar-row{display:grid;grid-template-columns:96px 1fr 34px;align-items:center;gap:9px}
-.bar-row .bar-label{font-size:12px;font-weight:700;color:var(--ink-700);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bar-track{height:14px;background:var(--paper-100);border-radius:7px;overflow:hidden}
-.bar-fill{height:100%;border-radius:7px;background:var(--green-600);transition:width .4s ease}
-.bar-row .bar-value{font-size:12.5px;font-weight:800;color:var(--ink-900);text-align:left}
+.bar-chart{display:flex;flex-direction:column;gap:12px}
+.bar-row{display:flex;align-items:center;gap:10px}
+.bar-row .bar-label{flex:0 0 124px;width:124px;font-size:11.5px;font-weight:700;color:var(--ink-700);line-height:1.3}
+.bar-track{flex:1 1 auto;height:14px;background:var(--paper-100);border-radius:7px;overflow:hidden}
+.bar-fill{height:100%;border-radius:7px;background:var(--green-600)}
+.bar-row .bar-value{flex:0 0 30px;width:30px;font-size:12.5px;font-weight:800;color:var(--ink-900);text-align:left}
 
 /* ---------- Task cards (responsive grid) ---------- */
 .card-grid{display:flex;flex-direction:column;gap:10px}
@@ -401,8 +401,8 @@ textarea.input{resize:vertical;min-height:78px}
 .nl-coverage-card-head strong{color:var(--green-800);font-size:12px}
 .nl-coverage-card .nl-photo-grid{margin-top:12px}
 .nl-coverage-item strong{color:var(--green-800);font-size:12px}
-.nl-photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:9px}
-.nl-photo-frame{margin:0;border:4px solid #fff;outline:1.5px solid var(--gold-500);border-radius:5px;box-shadow:var(--shadow-1);overflow:hidden;break-inside:avoid}
+.nl-photo-grid{display:flex;flex-wrap:wrap;gap:9px}
+.nl-photo-frame{width:112px;margin:0;border:4px solid #fff;outline:1.5px solid var(--gold-500);border-radius:5px;box-shadow:var(--shadow-1);overflow:hidden;break-inside:avoid}
 .nl-photo-frame img{width:100%;height:92px;object-fit:cover;display:block}
 .nl-photo-frame figcaption{padding:5px 7px;font-size:9.5px;color:var(--ink-500);text-align:center;background:#fff}
 .nl-footer{padding:16px 22px;text-align:center;font-size:10.5px;color:var(--ink-500);background:var(--paper-50)}
@@ -2453,29 +2453,29 @@ async function exportNewsletterPdf(n){
     await waitForImagesToLoad(el);
     const targetWidth=1600; /* دقة أعلى قليلاً هنا لأن المحتوى سينضغط لعرض صفحة PDF فعلي */
     const scale=targetWidth/el.offsetWidth;
+    const pageW=210, pageH=297; /* أبعاد A4 بالمليمتر */
+    const pageHeightCss=el.offsetWidth*(pageH/pageW); /* ارتفاع "صفحة واحدة" بوحدة بكسل CSS لنفس عرض العنصر الحالي */
+    const cssBreaks=computeSmartPageBreaks(el, pageHeightCss);
     const canvas=await window.html2canvas(el,{scale, useCORS:true, backgroundColor:'#ffffff'});
+    const imgWmm=pageW;
+    const pxPerMm=canvas.width/imgWmm;
     const { jsPDF }=window.jspdf;
     const pdf=new jsPDF({unit:'mm', format:'a4', orientation:'portrait'});
-    const pageW=210, pageH=297; /* أبعاد A4 بالمليمتر */
-    const imgWmm=pageW;
-    const imgHmmTotal=canvas.height*imgWmm/canvas.width;
-    const pxPerMm=canvas.width/imgWmm;
-    const pageHpx=Math.round(pageH*pxPerMm);
-    const totalPages=Math.max(1, Math.ceil(canvas.height/pageHpx));
-    for(let p=0;p<totalPages;p++){
+    let prevY=0;
+    cssBreaks.forEach((cssY,p)=>{
       if(p>0) pdf.addPage();
+      const sy=Math.round(prevY*scale), syEnd=Math.round(cssY*scale);
+      const sh=Math.max(1, syEnd-sy);
       const sliceCanvas=document.createElement('canvas');
-      sliceCanvas.width=canvas.width;
-      const sy=p*pageHpx;
-      const sh=Math.min(pageHpx, canvas.height-sy);
-      sliceCanvas.height=sh;
+      sliceCanvas.width=canvas.width; sliceCanvas.height=sh;
       const ctx=sliceCanvas.getContext('2d');
       ctx.fillStyle='#ffffff';
       ctx.fillRect(0,0,sliceCanvas.width,sh);
       ctx.drawImage(canvas, 0, sy, canvas.width, sh, 0, 0, canvas.width, sh);
       const sliceHmm=sh/pxPerMm;
       pdf.addImage(sliceCanvas.toDataURL('image/jpeg',0.92), 'JPEG', 0, 0, imgWmm, sliceHmm);
-    }
+      prevY=cssY;
+    });
     pdf.save(`نشرة-${n.periodLabel||n.period}.pdf`);
     setLoading(btn,false,'<span>'+icon('doc')+' تصدير PDF</span>');
   }catch(err){
@@ -3306,33 +3306,34 @@ async function exportReportToPdf(){
     await waitForImagesToLoad(el);
     const targetWidth=1600;
     const scale=targetWidth/el.offsetWidth;
+    const pageW=210, pageH=297;
+    const pageHeightCss=el.offsetWidth*(pageH/pageW);
+    const cssBreaks=computeSmartPageBreaks(el, pageHeightCss);
     let canvas;
     try{
       canvas=await window.html2canvas(el,{scale, useCORS:true, backgroundColor:'#ffffff'});
     } finally {
       document.body.classList.remove('exporting-pdf');
     }
-    const { jsPDF }=window.jspdf;
-    const pdf=new jsPDF({unit:'mm', format:'a4', orientation:'portrait'});
-    const pageW=210, pageH=297;
     const imgWmm=pageW;
     const pxPerMm=canvas.width/imgWmm;
-    const pageHpx=Math.round(pageH*pxPerMm);
-    const totalPages=Math.max(1, Math.ceil(canvas.height/pageHpx));
-    for(let p=0;p<totalPages;p++){
+    const { jsPDF }=window.jspdf;
+    const pdf=new jsPDF({unit:'mm', format:'a4', orientation:'portrait'});
+    let prevY=0;
+    cssBreaks.forEach((cssY,p)=>{
       if(p>0) pdf.addPage();
+      const sy=Math.round(prevY*scale), syEnd=Math.round(cssY*scale);
+      const sh=Math.max(1, syEnd-sy);
       const sliceCanvas=document.createElement('canvas');
-      sliceCanvas.width=canvas.width;
-      const sy=p*pageHpx;
-      const sh=Math.min(pageHpx, canvas.height-sy);
-      sliceCanvas.height=sh;
+      sliceCanvas.width=canvas.width; sliceCanvas.height=sh;
       const ctx=sliceCanvas.getContext('2d');
       ctx.fillStyle='#ffffff';
       ctx.fillRect(0,0,sliceCanvas.width,sh);
       ctx.drawImage(canvas, 0, sy, canvas.width, sh, 0, 0, canvas.width, sh);
       const sliceHmm=sh/pxPerMm;
       pdf.addImage(sliceCanvas.toDataURL('image/jpeg',0.92), 'JPEG', 0, 0, imgWmm, sliceHmm);
-    }
+      prevY=cssY;
+    });
     pdf.save('تقرير-فريق-التصوير.pdf');
     setLoading(btn,false,'<span>'+icon('doc')+' PDF</span>');
   }catch(err){
@@ -3467,6 +3468,32 @@ function waitForImagesToLoad(container){
     if(img.complete) return Promise.resolve();
     return new Promise(resolve=>{ img.onload=resolve; img.onerror=resolve; });
   }));
+}
+/* يحسب نقاط تقسيم الصفحات باحترام حدود العناصر "الممنوع قطعها" (بطاقة، صورة، بطاقة إحصائية...)
+   بدل التقسيم الأعمى كل ارتفاع صفحة ثابت — لو نقطة القطع الطبيعية تقع وسط أحد هذي العناصر،
+   نرجعها لبداية ذلك العنصر فينتقل كاملاً للصفحة التالية بدل ما ينقص. يُعيد المسافات بوحدة بكسل CSS
+   (نسبةً لأعلى الحاوية)، تُحوَّل لاحقاً لبكسل الكانفاس عبر معامل التكبير (scale) بالمستدعي. */
+function computeSmartPageBreaks(container, pageHeightCss){
+  const guardSelectors='.nl-coverage-card,.nl-photo-frame,.nl-stat-chip,.grid-card,.stat-card,.section,.bar-row';
+  const guards=Array.from(container.querySelectorAll(guardSelectors));
+  const containerTop=container.getBoundingClientRect().top;
+  const guardRects=guards.map(el=>{
+    const r=el.getBoundingClientRect();
+    return { top:r.top-containerTop, bottom:r.bottom-containerTop };
+  }).filter(g=> (g.bottom-g.top) < pageHeightCss*0.92); /* عنصر أطول من الصفحة نفسها يستحيل تجنّب قطعه، فنتجاهله */
+  const totalHeight=container.scrollHeight;
+  const breaks=[];
+  let cursor=0;
+  const minPageHeight=pageHeightCss*0.5;
+  while(cursor<totalHeight-1){
+    let cut=Math.min(cursor+pageHeightCss, totalHeight);
+    if(cut>=totalHeight){ breaks.push(totalHeight); break; }
+    const clash=guardRects.find(g=>cut>g.top+2 && cut<g.bottom-2);
+    if(clash && clash.top>cursor+minPageHeight){ cut=clash.top; }
+    breaks.push(cut);
+    cursor=cut;
+  }
+  return breaks;
 }
 /* قوائم مقترحات تتراكم تلقائياً من كل النشرات السابقة (بالإضافة لبذور أولية من نشرتها المرجعية)،
    تُستخدم كـ datalist بحقول الولاية/المديرية/الفعالية حتى تصير ثابتة ولا تحتاج كتابة من جديد كل مرة */
