@@ -2326,6 +2326,45 @@ async function ensureXLSXLoaded(){
   XLSXLib = await import('https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs');
   return XLSXLib;
 }
+let html2canvasLoaded=false;
+function ensureHtml2CanvasLoaded(){
+  if(html2canvasLoaded && window.html2canvas) return Promise.resolve();
+  return new Promise((resolve,reject)=>{
+    const script=document.createElement('script');
+    script.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+    script.onload=()=>{ html2canvasLoaded=true; resolve(); };
+    script.onerror=()=>reject(new Error('load-failed'));
+    document.head.appendChild(script);
+  });
+}
+async function exportNewsletterPng(n){
+  const btn=$('#pngNlBtn');
+  setLoading(btn,true);
+  try{
+    await ensureHtml2CanvasLoaded();
+    const el=document.querySelector('.nl-sheet');
+    const canvas=await window.html2canvas(el,{scale:2,useCORS:true,backgroundColor:'#ffffff'});
+    await new Promise((resolve)=>{
+      canvas.toBlob((blob)=>{
+        if(!blob){ resolve(); return; }
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');
+        a.href=url;
+        a.download=`نشرة-${n.periodLabel||n.period}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        resolve();
+      },'image/png');
+    });
+    setLoading(btn,false,'<span>'+icon('film')+' تصدير PNG</span>');
+  }catch(err){
+    console.error(err);
+    setLoading(btn,false,'<span>'+icon('film')+' تصدير PNG</span>');
+    toast('تعذر تصدير الصورة، تأكدي من الاتصال بالإنترنت',true);
+  }
+}
 function cellToISODate(cell){
   if(cell==null) return null;
   let y,m,d;
@@ -3434,13 +3473,16 @@ function wireNewsletterAdd(editId){
     if(!input) return;
     const idx=input.dataset.cphotoInput;
     const files=Array.from(input.files||[]);
+    nlCoveragePhotos[idx]=nlCoveragePhotos[idx]||[];
+    let failCount=0;
     for(const file of files){
+      if(nlCoveragePhotos[idx].length>=8){ toast('وصلتِ للحد الأقصى (8 صور) لهذا الموقع',true); break; }
       try{
-        const dataUrl=await resizeImageFileToDataURL_rect(file, 640, 0.72);
-        nlCoveragePhotos[idx]=nlCoveragePhotos[idx]||[];
+        const dataUrl=await resizeImageFileToDataURL_rect(file, 480, 0.65);
         nlCoveragePhotos[idx].push({dataUrl, caption:''});
-      }catch(err){ console.error(err); }
+      }catch(err){ console.error(err); failCount++; }
     }
+    if(failCount>0) toast(failCount===1?'تعذّرت إضافة صورة واحدة، جرّبي صورة أخرى':`تعذّرت إضافة ${failCount} صور، جرّبي صوراً أخرى`,true);
     input.value='';
     $(`[data-cphotos-grid="${idx}"]`).innerHTML=nlCoveragePhotosGridHtml(idx);
   });
@@ -3466,13 +3508,16 @@ function wireNewsletterAdd(editId){
     if(!input) return;
     const idx=input.dataset.ephotoInput;
     const files=Array.from(input.files||[]);
+    nlEventPhotos[idx]=nlEventPhotos[idx]||[];
+    let failCount=0;
     for(const file of files){
+      if(nlEventPhotos[idx].length>=8){ toast('وصلتِ للحد الأقصى (8 صور) لهذه الفعالية',true); break; }
       try{
-        const dataUrl=await resizeImageFileToDataURL_rect(file, 640, 0.72);
-        nlEventPhotos[idx]=nlEventPhotos[idx]||[];
+        const dataUrl=await resizeImageFileToDataURL_rect(file, 480, 0.65);
         nlEventPhotos[idx].push({dataUrl, caption:''});
-      }catch(err){ console.error(err); }
+      }catch(err){ console.error(err); failCount++; }
     }
+    if(failCount>0) toast(failCount===1?'تعذّرت إضافة صورة واحدة، جرّبي صورة أخرى':`تعذّرت إضافة ${failCount} صور، جرّبي صوراً أخرى`,true);
     input.value='';
     $(`[data-ephotos-grid="${idx}"]`).innerHTML=nlEventPhotosGridHtml(idx);
   });
@@ -3543,19 +3588,22 @@ function wireNewsletterAdd(editId){
 /* نسخة من دالة تصغير الصور تدعم عرضاً مستطيلاً أكبر (لصور النشرة) بدل التربيع الثابت للصورة الرمزية */
 function resizeImageFileToDataURL_rect(file, maxWidth, quality){
   return new Promise((resolve,reject)=>{
+    if(!file || !file.type || !file.type.startsWith('image/')){ reject(new Error('not-an-image')); return; }
     const reader=new FileReader();
     reader.onerror=()=>reject(new Error('read-failed'));
     reader.onload=()=>{
       const img=new Image();
       img.onerror=()=>reject(new Error('image-decode-failed'));
       img.onload=()=>{
-        const ratio=Math.min(1, maxWidth/img.width);
-        const w=Math.round(img.width*ratio), h=Math.round(img.height*ratio);
-        const canvas=document.createElement('canvas');
-        canvas.width=w; canvas.height=h;
-        const ctx=canvas.getContext('2d');
-        ctx.drawImage(img,0,0,w,h);
-        resolve(canvas.toDataURL('image/jpeg', quality||0.75));
+        try{
+          const ratio=Math.min(1, maxWidth/img.width);
+          const w=Math.max(1,Math.round(img.width*ratio)), h=Math.max(1,Math.round(img.height*ratio));
+          const canvas=document.createElement('canvas');
+          canvas.width=w; canvas.height=h;
+          const ctx=canvas.getContext('2d');
+          ctx.drawImage(img,0,0,w,h);
+          resolve(canvas.toDataURL('image/jpeg', quality||0.75));
+        }catch(err){ reject(err); }
       };
       img.src=reader.result;
     };
@@ -3573,6 +3621,7 @@ function renderNewsletterView(id){
     <button class="btn btn-ghost btn-sm" data-go="portal-newsletters">${icon('chev')} رجوع</button>
     <div style="display:flex;gap:8px">
       <button class="btn btn-outline btn-sm" id="printNlBtn">${icon('doc')} تصدير PDF</button>
+      <button class="btn btn-outline btn-sm" id="pngNlBtn">${icon('film')} تصدير PNG</button>
       ${S.user.role==='lead'?`<button class="btn btn-outline btn-sm" id="editNlBtn">${icon('edit')} تعديل</button>`:''}
       ${S.user.role==='lead'?`<button class="btn btn-danger btn-sm" id="deleteNlBtn">${icon('trash')} حذف</button>`:''}
     </div>
@@ -3653,6 +3702,11 @@ function wireNewsletterView(id){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   const pb=$('#printNlBtn');
   if(pb) pb.addEventListener('click',()=>window.print());
+  const pngb=$('#pngNlBtn');
+  if(pngb) pngb.addEventListener('click',()=>{
+    const n=S.newsletters.find(x=>x.id===id);
+    if(n) exportNewsletterPng(n);
+  });
   const eb=$('#editNlBtn');
   if(eb) eb.addEventListener('click',()=>go('portal-newsletter-edit', id));
   const db2=$('#deleteNlBtn');
