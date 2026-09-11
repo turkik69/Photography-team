@@ -2396,47 +2396,84 @@ function ensureHtml2CanvasLoaded(){
     document.head.appendChild(script);
   });
 }
+let jsPDFLoaded=false;
+function ensureJsPDFLoaded(){
+  if(jsPDFLoaded && window.jspdf) return Promise.resolve();
+  return new Promise((resolve,reject)=>{
+    const script=document.createElement('script');
+    script.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    script.onload=()=>{ jsPDFLoaded=true; resolve(); };
+    script.onerror=()=>reject(new Error('load-failed'));
+    document.head.appendChild(script);
+  });
+}
 async function exportNewsletterPng(n){
   const btn=$('#pngNlBtn');
   setLoading(btn,true);
   try{
     await ensureHtml2CanvasLoaded();
     const el=document.querySelector('.nl-sheet');
-    const canvas=await window.html2canvas(el,{scale:2,useCORS:true,backgroundColor:'#ffffff'});
-    /* تقسيم الصورة الملتقطة لصفحات بنسبة A4 (١ : ١.٤١٤٢)، وتنزيل كل صفحة كملف PNG مستقل مرقّم إن كانت أكثر من صفحة */
-    const a4Ratio=Math.SQRT2;
-    const pageW=canvas.width;
-    const pageH=Math.round(pageW*a4Ratio);
-    const totalPages=Math.max(1, Math.ceil(canvas.height/pageH));
-    for(let p=0;p<totalPages;p++){
-      const pageCanvas=document.createElement('canvas');
-      pageCanvas.width=pageW; pageCanvas.height=pageH;
-      const ctx=pageCanvas.getContext('2d');
-      ctx.fillStyle='#ffffff';
-      ctx.fillRect(0,0,pageW,pageH);
-      const sy=p*pageH;
-      const sh=Math.min(pageH, canvas.height-sy);
-      ctx.drawImage(canvas, 0, sy, pageW, sh, 0, 0, pageW, sh);
-      await new Promise((resolve)=>{
-        pageCanvas.toBlob((blob)=>{
-          if(!blob){ resolve(); return; }
-          const url=URL.createObjectURL(blob);
-          const a=document.createElement('a');
-          a.href=url;
-          a.download = totalPages>1 ? `نشرة-${n.periodLabel||n.period}-صفحة-${p+1}.png` : `نشرة-${n.periodLabel||n.period}.png`;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          URL.revokeObjectURL(url);
-          resolve();
-        },'image/png');
-      });
-    }
+    const targetWidth=1240; /* عرض صفحة A4 عند دقة ١٥٠ نقطة/بوصة */
+    const scale=targetWidth/el.offsetWidth;
+    const canvas=await window.html2canvas(el,{scale, useCORS:true, backgroundColor:'#ffffff'});
+    await new Promise((resolve)=>{
+      canvas.toBlob((blob)=>{
+        if(!blob){ resolve(); return; }
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');
+        a.href=url;
+        a.download=`نشرة-${n.periodLabel||n.period}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        resolve();
+      },'image/png');
+    });
     setLoading(btn,false,'<span>'+icon('film')+' تصدير PNG</span>');
   }catch(err){
     console.error(err);
     setLoading(btn,false,'<span>'+icon('film')+' تصدير PNG</span>');
     toast('تعذر تصدير الصورة، تأكدي من الاتصال بالإنترنت',true);
+  }
+}
+async function exportNewsletterPdf(n){
+  const btn=$('#printNlBtn');
+  setLoading(btn,true);
+  try{
+    await Promise.all([ensureHtml2CanvasLoaded(), ensureJsPDFLoaded()]);
+    const el=document.querySelector('.nl-sheet');
+    const targetWidth=1600; /* دقة أعلى قليلاً هنا لأن المحتوى سينضغط لعرض صفحة PDF فعلي */
+    const scale=targetWidth/el.offsetWidth;
+    const canvas=await window.html2canvas(el,{scale, useCORS:true, backgroundColor:'#ffffff'});
+    const { jsPDF }=window.jspdf;
+    const pdf=new jsPDF({unit:'mm', format:'a4', orientation:'portrait'});
+    const pageW=210, pageH=297; /* أبعاد A4 بالمليمتر */
+    const imgWmm=pageW;
+    const imgHmmTotal=canvas.height*imgWmm/canvas.width;
+    const pxPerMm=canvas.width/imgWmm;
+    const pageHpx=Math.round(pageH*pxPerMm);
+    const totalPages=Math.max(1, Math.ceil(canvas.height/pageHpx));
+    for(let p=0;p<totalPages;p++){
+      if(p>0) pdf.addPage();
+      const sliceCanvas=document.createElement('canvas');
+      sliceCanvas.width=canvas.width;
+      const sy=p*pageHpx;
+      const sh=Math.min(pageHpx, canvas.height-sy);
+      sliceCanvas.height=sh;
+      const ctx=sliceCanvas.getContext('2d');
+      ctx.fillStyle='#ffffff';
+      ctx.fillRect(0,0,sliceCanvas.width,sh);
+      ctx.drawImage(canvas, 0, sy, canvas.width, sh, 0, 0, canvas.width, sh);
+      const sliceHmm=sh/pxPerMm;
+      pdf.addImage(sliceCanvas.toDataURL('image/jpeg',0.92), 'JPEG', 0, 0, imgWmm, sliceHmm);
+    }
+    pdf.save(`نشرة-${n.periodLabel||n.period}.pdf`);
+    setLoading(btn,false,'<span>'+icon('doc')+' تصدير PDF</span>');
+  }catch(err){
+    console.error(err);
+    setLoading(btn,false,'<span>'+icon('doc')+' تصدير PDF</span>');
+    toast('تعذر تصدير PDF، تأكدي من الاتصال بالإنترنت',true);
   }
 }
 function cellToISODate(cell){
@@ -3781,7 +3818,10 @@ function wireNewsletterView(id){
     });
   }).catch(err=>console.error(err));
   const pb=$('#printNlBtn');
-  if(pb) pb.addEventListener('click',()=>window.print());
+  if(pb) pb.addEventListener('click',()=>{
+    const n=S.newsletters.find(x=>x.id===id);
+    if(n) exportNewsletterPdf(n);
+  });
   const pngb=$('#pngNlBtn');
   if(pngb) pngb.addEventListener('click',()=>{
     const n=S.newsletters.find(x=>x.id===id);
