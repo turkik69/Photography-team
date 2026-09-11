@@ -419,6 +419,9 @@ textarea.input{resize:vertical;min-height:78px}
 
 /* ---------- Print (reports) ---------- */
 .print-header{display:none}
+/* تُستخدم مؤقتاً أثناء التقاط الصفحة برمجياً لتصدير PDF (بدل طباعة المتصفح)، فتُظهر رأس الطباعة وتُخفي عناصر التحكم بنفس منطق @media print أدناه */
+.exporting-pdf .no-print{display:none!important}
+.exporting-pdf .print-header{display:flex!important}
 @media print{
   @page{ size:A4; margin:14mm; }
   .topbar,.bottomnav,.no-print,.fab{display:none!important}
@@ -2413,6 +2416,8 @@ async function exportNewsletterPng(n){
   try{
     await ensureHtml2CanvasLoaded();
     const el=document.querySelector('.nl-sheet');
+    await injectNewsletterViewPhotos(n.id);
+    await waitForImagesToLoad(el);
     const targetWidth=1240; /* عرض صفحة A4 عند دقة ١٥٠ نقطة/بوصة */
     const scale=targetWidth/el.offsetWidth;
     const canvas=await window.html2canvas(el,{scale, useCORS:true, backgroundColor:'#ffffff'});
@@ -2443,6 +2448,8 @@ async function exportNewsletterPdf(n){
   try{
     await Promise.all([ensureHtml2CanvasLoaded(), ensureJsPDFLoaded()]);
     const el=document.querySelector('.nl-sheet');
+    await injectNewsletterViewPhotos(n.id);
+    await waitForImagesToLoad(el);
     const targetWidth=1600; /* دقة أعلى قليلاً هنا لأن المحتوى سينضغط لعرض صفحة PDF فعلي */
     const scale=targetWidth/el.offsetWidth;
     const canvas=await window.html2canvas(el,{scale, useCORS:true, backgroundColor:'#ffffff'});
@@ -3288,6 +3295,52 @@ function wireReportBodyInteractions(){
   $all('[data-report-meeting]').forEach(el=>el.addEventListener('click',()=>go('portal-meeting-detail',el.dataset.reportMeeting)));
   $all('[data-report-task]').forEach(el=>el.addEventListener('click',()=>go('portal-task-detail',el.dataset.reportTask)));
 }
+async function exportReportToPdf(){
+  const btn=$('#printReportBtn');
+  setLoading(btn,true);
+  try{
+    await Promise.all([ensureHtml2CanvasLoaded(), ensureJsPDFLoaded()]);
+    const el=$('#reportBody');
+    document.body.classList.add('exporting-pdf');
+    await waitForImagesToLoad(el);
+    const targetWidth=1600;
+    const scale=targetWidth/el.offsetWidth;
+    let canvas;
+    try{
+      canvas=await window.html2canvas(el,{scale, useCORS:true, backgroundColor:'#ffffff'});
+    } finally {
+      document.body.classList.remove('exporting-pdf');
+    }
+    const { jsPDF }=window.jspdf;
+    const pdf=new jsPDF({unit:'mm', format:'a4', orientation:'portrait'});
+    const pageW=210, pageH=297;
+    const imgWmm=pageW;
+    const pxPerMm=canvas.width/imgWmm;
+    const pageHpx=Math.round(pageH*pxPerMm);
+    const totalPages=Math.max(1, Math.ceil(canvas.height/pageHpx));
+    for(let p=0;p<totalPages;p++){
+      if(p>0) pdf.addPage();
+      const sliceCanvas=document.createElement('canvas');
+      sliceCanvas.width=canvas.width;
+      const sy=p*pageHpx;
+      const sh=Math.min(pageHpx, canvas.height-sy);
+      sliceCanvas.height=sh;
+      const ctx=sliceCanvas.getContext('2d');
+      ctx.fillStyle='#ffffff';
+      ctx.fillRect(0,0,sliceCanvas.width,sh);
+      ctx.drawImage(canvas, 0, sy, canvas.width, sh, 0, 0, canvas.width, sh);
+      const sliceHmm=sh/pxPerMm;
+      pdf.addImage(sliceCanvas.toDataURL('image/jpeg',0.92), 'JPEG', 0, 0, imgWmm, sliceHmm);
+    }
+    pdf.save('تقرير-فريق-التصوير.pdf');
+    setLoading(btn,false,'<span>'+icon('doc')+' PDF</span>');
+  }catch(err){
+    console.error(err);
+    document.body.classList.remove('exporting-pdf');
+    setLoading(btn,false,'<span>'+icon('doc')+' PDF</span>');
+    toast('تعذر تصدير PDF، تأكدي من الاتصال بالإنترنت',true);
+  }
+}
 async function exportReportToExcel(){
   const btn=$('#exportExcelBtn');
   setLoading(btn,true);
@@ -3347,6 +3400,24 @@ function nlViewPhotoGridInnerHtml(photos){
       <img src="${p.dataUrl}" alt="">
       ${p.caption?`<figcaption>${esc(p.caption)}</figcaption>`:''}
     </figure>`).join('');
+}
+async function injectNewsletterViewPhotos(id){
+  const photos=await fetchNewsletterPhotos(id);
+  Object.keys(photos.coverage||{}).forEach(idx=>{
+    const grid=$(`[data-view-cphotos="${idx}"]`);
+    if(grid) grid.innerHTML=nlViewPhotoGridInnerHtml(photos.coverage[idx]);
+  });
+  Object.keys(photos.event||{}).forEach(idx=>{
+    const grid=$(`[data-view-ephotos="${idx}"]`);
+    if(grid) grid.innerHTML=nlViewPhotoGridInnerHtml(photos.event[idx]);
+  });
+}
+function waitForImagesToLoad(container){
+  const imgs=Array.from(container.querySelectorAll('img'));
+  return Promise.all(imgs.map(img=>{
+    if(img.complete) return Promise.resolve();
+    return new Promise(resolve=>{ img.onload=resolve; img.onerror=resolve; });
+  }));
 }
 /* قوائم مقترحات تتراكم تلقائياً من كل النشرات السابقة (بالإضافة لبذور أولية من نشرتها المرجعية)،
    تُستخدم كـ datalist بحقول الولاية/المديرية/الفعالية حتى تصير ثابتة ولا تحتاج كتابة من جديد كل مرة */
@@ -3807,16 +3878,7 @@ function renderNewsletterView(id){
 }
 function wireNewsletterView(id){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
-  fetchNewsletterPhotos(id).then(photos=>{
-    Object.keys(photos.coverage||{}).forEach(idx=>{
-      const grid=$(`[data-view-cphotos="${idx}"]`);
-      if(grid) grid.innerHTML=nlViewPhotoGridInnerHtml(photos.coverage[idx]);
-    });
-    Object.keys(photos.event||{}).forEach(idx=>{
-      const grid=$(`[data-view-ephotos="${idx}"]`);
-      if(grid) grid.innerHTML=nlViewPhotoGridInnerHtml(photos.event[idx]);
-    });
-  }).catch(err=>console.error(err));
+  injectNewsletterViewPhotos(id).catch(err=>console.error(err));
   const pb=$('#printNlBtn');
   if(pb) pb.addEventListener('click',()=>{
     const n=S.newsletters.find(x=>x.id===id);
@@ -3863,7 +3925,7 @@ function wireReports(){
   });
   wireReportBodyInteractions();
   const pb=$('#printReportBtn');
-  if(pb) pb.addEventListener('click',()=>window.print());
+  if(pb) pb.addEventListener('click',exportReportToPdf);
   const xb=$('#exportExcelBtn');
   if(xb) xb.addEventListener('click',exportReportToExcel);
 }
