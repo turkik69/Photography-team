@@ -420,6 +420,7 @@ textarea.input{resize:vertical;min-height:78px}
 /* ---------- Print (reports) ---------- */
 .print-header{display:none}
 @media print{
+  @page{ size:A4; margin:14mm; }
   .topbar,.bottomnav,.no-print,.fab{display:none!important}
   body{background:#fff}
   .print-header{
@@ -431,9 +432,15 @@ textarea.input{resize:vertical;min-height:78px}
   .print-header p{font-size:11px;color:var(--ink-500);margin-top:2px}
   .section{break-inside:avoid;box-shadow:none;border:1px solid var(--line-strong)}
   .list-item{break-inside:avoid}
+  .grid-card{break-inside:avoid}
+  .bar-row{break-inside:avoid}
+  .stat-card{break-inside:avoid}
   .nl-sheet{box-shadow:none;border:1px solid var(--line-strong)}
-  .nl-section{break-inside:avoid}
-  .nl-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .nl-coverage-card{break-inside:avoid}
+  .nl-stat-chip{break-inside:avoid}
+  .nl-header{-webkit-print-color-adjust:exact;print-color-adjust:exact;break-after:avoid}
+  h2{break-after:avoid}
+  .container,.nl-sheet{max-width:none!important;padding:0!important}
 }
 </style>
 </head>
@@ -2396,20 +2403,35 @@ async function exportNewsletterPng(n){
     await ensureHtml2CanvasLoaded();
     const el=document.querySelector('.nl-sheet');
     const canvas=await window.html2canvas(el,{scale:2,useCORS:true,backgroundColor:'#ffffff'});
-    await new Promise((resolve)=>{
-      canvas.toBlob((blob)=>{
-        if(!blob){ resolve(); return; }
-        const url=URL.createObjectURL(blob);
-        const a=document.createElement('a');
-        a.href=url;
-        a.download=`نشرة-${n.periodLabel||n.period}.png`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-        resolve();
-      },'image/png');
-    });
+    /* تقسيم الصورة الملتقطة لصفحات بنسبة A4 (١ : ١.٤١٤٢)، وتنزيل كل صفحة كملف PNG مستقل مرقّم إن كانت أكثر من صفحة */
+    const a4Ratio=Math.SQRT2;
+    const pageW=canvas.width;
+    const pageH=Math.round(pageW*a4Ratio);
+    const totalPages=Math.max(1, Math.ceil(canvas.height/pageH));
+    for(let p=0;p<totalPages;p++){
+      const pageCanvas=document.createElement('canvas');
+      pageCanvas.width=pageW; pageCanvas.height=pageH;
+      const ctx=pageCanvas.getContext('2d');
+      ctx.fillStyle='#ffffff';
+      ctx.fillRect(0,0,pageW,pageH);
+      const sy=p*pageH;
+      const sh=Math.min(pageH, canvas.height-sy);
+      ctx.drawImage(canvas, 0, sy, pageW, sh, 0, 0, pageW, sh);
+      await new Promise((resolve)=>{
+        pageCanvas.toBlob((blob)=>{
+          if(!blob){ resolve(); return; }
+          const url=URL.createObjectURL(blob);
+          const a=document.createElement('a');
+          a.href=url;
+          a.download = totalPages>1 ? `نشرة-${n.periodLabel||n.period}-صفحة-${p+1}.png` : `نشرة-${n.periodLabel||n.period}.png`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+          resolve();
+        },'image/png');
+      });
+    }
     setLoading(btn,false,'<span>'+icon('film')+' تصدير PNG</span>');
   }catch(err){
     console.error(err);
