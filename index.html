@@ -921,6 +921,7 @@ function render(){
   if(S.route==='portal-dashboard') inner=renderDashboard();
   else if(S.route==='portal-requests') inner=renderRequestsList();
   else if(S.route==='portal-request-add') inner=renderRequestAddInternal();
+  else if(S.route==='portal-request-edit') inner=renderRequestEdit(S.routeParam);
   else if(S.route==='portal-request-detail') inner=renderRequestDetail(S.routeParam);
   else if(S.route==='portal-visits') inner=renderVisitsList();
   else if(S.route==='portal-visit-add') inner=renderVisitAdd();
@@ -979,6 +980,7 @@ function wireShellEvents(){
 function wirePortalRoute(){
   if(S.route==='portal-requests') wireRequestsList();
   else if(S.route==='portal-request-add') wireRequestAddInternal();
+  else if(S.route==='portal-request-edit') wireRequestEdit(S.routeParam);
   else if(S.route==='portal-request-detail') wireRequestDetail(S.routeParam);
   else if(S.route==='portal-visits') wireVisitsList();
   else if(S.route==='portal-visit-add') wireVisitAdd();
@@ -1094,19 +1096,23 @@ const PRIORITIES=[
   {k:'medium',label:'متوسط'},
   {k:'prescheduled',label:'مجدول مسبقاً'},
 ];
-function requestFormFieldsHtml(){
+function requestFormFieldsHtml(existing){
+  const r=existing||{};
+  const req=r.requester||{}, ev=r.event||{}, svc=r.serviceTypes||{}, out=r.outputs||{}, ex=r.extra||{}, mgr=r.managerApproval||{};
+  const priority=r.priority||'medium';
+  const svcOther=svc.other, outOther=out.other;
   return `
       <form id="reqForm" novalidate>
         <div class="section">
           <div class="section-head">${icon('id')} معلومات مقدم الطلب</div>
           <div class="section-body">
             <div class="row2">
-              <div class="field"><label>المديرية / الدائرة</label><input class="input" name="directorate" data-required="المديرية / الدائرة" required></div>
-              <div class="field"><label>رقم المحول</label><input class="input" name="transferNumber"></div>
+              <div class="field"><label>المديرية / الدائرة</label><input class="input" name="directorate" value="${esc(req.directorate||'')}" data-required="المديرية / الدائرة" required></div>
+              <div class="field"><label>رقم المحول</label><input class="input" name="transferNumber" value="${esc(req.transferNumber||'')}"></div>
             </div>
             <div class="row2">
-              <div class="field"><label>اسم الموظف</label><input class="input" name="employeeName" data-required="اسم الموظف" required></div>
-              <div class="field"><label>الرقم الوظيفي</label><input class="input" name="employeeNumber" data-required="الرقم الوظيفي" required></div>
+              <div class="field"><label>اسم الموظف</label><input class="input" name="employeeName" value="${esc(req.employeeName||'')}" data-required="اسم الموظف" required></div>
+              <div class="field"><label>الرقم الوظيفي</label><input class="input" name="employeeNumber" value="${esc(req.employeeNumber||'')}" data-required="الرقم الوظيفي" required></div>
             </div>
           </div>
         </div>
@@ -1114,14 +1120,14 @@ function requestFormFieldsHtml(){
         <div class="section">
           <div class="section-head">${icon('calendar')} معلومات الفعالية / الموضوع</div>
           <div class="section-body">
-            <div class="field"><label>اسم الفعالية / الموضوع</label><input class="input" name="eventName" data-required="اسم الفعالية / الموضوع" required></div>
-            <div class="field"><label>وصف مختصر للفعالية / الموضوع</label><textarea class="input" name="eventDesc"></textarea></div>
+            <div class="field"><label>اسم الفعالية / الموضوع</label><input class="input" name="eventName" value="${esc(ev.name||'')}" data-required="اسم الفعالية / الموضوع" required></div>
+            <div class="field"><label>وصف مختصر للفعالية / الموضوع</label><textarea class="input" name="eventDesc">${esc(ev.description||'')}</textarea></div>
             <div class="row3">
-              <div class="field"><label>تاريخ التصوير</label><input class="input" type="date" name="eventDate" data-required="تاريخ التصوير" required></div>
-              <div class="field"><label>وقت التصوير</label><input class="input" type="time" name="startTime"></div>
-              <div class="field"><label>وقت انتهاء التصوير</label><input class="input" type="time" name="endTime"></div>
+              <div class="field"><label>تاريخ التصوير</label><input class="input" type="date" name="eventDate" value="${esc(ev.date||'')}" data-required="تاريخ التصوير" required></div>
+              <div class="field"><label>وقت التصوير</label><input class="input" type="time" name="startTime" value="${esc(ev.startTime||'')}"></div>
+              <div class="field"><label>وقت انتهاء التصوير</label><input class="input" type="time" name="endTime" value="${esc(ev.endTime||'')}"></div>
             </div>
-            <div class="field"><label>موقع التصوير</label><input class="input" name="location" data-required="موقع التصوير" required></div>
+            <div class="field"><label>موقع التصوير</label><input class="input" name="location" value="${esc(ev.location||'')}" data-required="موقع التصوير" required></div>
           </div>
         </div>
 
@@ -1130,15 +1136,15 @@ function requestFormFieldsHtml(){
           <div class="section-body">
             <div class="check-grid">
               ${SERVICE_TYPES.map(t=>`
-                <label class="check-tile" data-tile>
-                  <input type="checkbox" name="svc_${t.k}">${icon(t.icon)}<span>${t.label}</span>
+                <label class="check-tile ${svc[t.k]?'on':''}" data-tile>
+                  <input type="checkbox" name="svc_${t.k}" ${svc[t.k]?'checked':''}>${icon(t.icon)}<span>${t.label}</span>
                 </label>`).join('')}
-              <label class="check-tile" data-tile>
-                <input type="checkbox" name="svc_other" data-other-toggle="svcOtherText">${icon('plus')}<span>أخرى</span>
+              <label class="check-tile ${svcOther?'on':''}" data-tile>
+                <input type="checkbox" name="svc_other" data-other-toggle="svcOtherText" ${svcOther?'checked':''}>${icon('plus')}<span>أخرى</span>
               </label>
             </div>
-            <div class="field" id="svcOtherText" style="display:none;margin-top:10px">
-              <input class="input" name="svcOtherLabel" placeholder="حدد نوع الخدمة الأخرى">
+            <div class="field" id="svcOtherText" style="display:${svcOther?'block':'none'};margin-top:10px">
+              <input class="input" name="svcOtherLabel" value="${esc(svc.otherLabel||'')}" placeholder="حدد نوع الخدمة الأخرى">
             </div>
           </div>
         </div>
@@ -1148,15 +1154,15 @@ function requestFormFieldsHtml(){
           <div class="section-body">
             <div class="check-grid">
               ${OUTPUT_TYPES.map(t=>`
-                <label class="check-tile" data-tile>
-                  <input type="checkbox" name="out_${t.k}">${icon('check')}<span>${t.label}</span>
+                <label class="check-tile ${out[t.k]?'on':''}" data-tile>
+                  <input type="checkbox" name="out_${t.k}" ${out[t.k]?'checked':''}>${icon('check')}<span>${t.label}</span>
                 </label>`).join('')}
-              <label class="check-tile" data-tile>
-                <input type="checkbox" name="out_other" data-other-toggle="outOtherText">${icon('plus')}<span>أخرى</span>
+              <label class="check-tile ${outOther?'on':''}" data-tile>
+                <input type="checkbox" name="out_other" data-other-toggle="outOtherText" ${outOther?'checked':''}>${icon('plus')}<span>أخرى</span>
               </label>
             </div>
-            <div class="field" id="outOtherText" style="display:none;margin-top:10px">
-              <input class="input" name="outOtherLabel" placeholder="حدد المخرج الآخر">
+            <div class="field" id="outOtherText" style="display:${outOther?'block':'none'};margin-top:10px">
+              <input class="input" name="outOtherLabel" value="${esc(out.otherLabel||'')}" placeholder="حدد المخرج الآخر">
             </div>
           </div>
         </div>
@@ -1164,9 +1170,9 @@ function requestFormFieldsHtml(){
         <div class="section">
           <div class="section-head">${icon('doc')} معلومات إضافية</div>
           <div class="section-body">
-            <div class="field"><label>الشخصيات المهمة المشاركة</label><textarea class="input" name="importantPeople"></textarea></div>
-            <div class="field"><label>اللقطات المطلوبة للتركيز عليها</label><textarea class="input" name="focusShots"></textarea></div>
-            <div class="field"><label>ملاحظات وإرشادات إضافية</label><textarea class="input" name="extraNotes"></textarea></div>
+            <div class="field"><label>الشخصيات المهمة المشاركة</label><textarea class="input" name="importantPeople">${esc(ex.importantPeople||'')}</textarea></div>
+            <div class="field"><label>اللقطات المطلوبة للتركيز عليها</label><textarea class="input" name="focusShots">${esc(ex.focusShots||'')}</textarea></div>
+            <div class="field"><label>ملاحظات وإرشادات إضافية</label><textarea class="input" name="extraNotes">${esc(ex.notes||'')}</textarea></div>
           </div>
         </div>
 
@@ -1174,9 +1180,9 @@ function requestFormFieldsHtml(){
           <div class="section-head gold">${icon('alert')} أولوية الطلب</div>
           <div class="section-body">
             <div class="radio-row" id="priorityRow">
-              ${PRIORITIES.map((p,i)=>`<button type="button" class="radio-pill ${i===1?'on '+p.k:''}" data-priority="${p.k}">${p.label}</button>`).join('')}
+              ${PRIORITIES.map(p=>`<button type="button" class="radio-pill ${priority===p.k?'on '+p.k:''}" data-priority="${p.k}">${p.label}</button>`).join('')}
             </div>
-            <input type="hidden" name="priority" value="medium">
+            <input type="hidden" name="priority" value="${priority}">
           </div>
         </div>
 
@@ -1185,15 +1191,15 @@ function requestFormFieldsHtml(){
           <div class="section-body">
             <p class="muted" style="margin-bottom:12px">يُعبأ من قبل المدير أو المسؤول المباشر لمقدم الطلب</p>
             <div class="row2">
-              <div class="field"><label>الاسم</label><input class="input" name="managerName"></div>
-              <div class="field"><label>التاريخ</label><input class="input" type="date" name="managerDate"></div>
+              <div class="field"><label>الاسم</label><input class="input" name="managerName" value="${esc(mgr.name||'')}"></div>
+              <div class="field"><label>التاريخ</label><input class="input" type="date" name="managerDate" value="${esc(mgr.date||'')}"></div>
             </div>
           </div>
         </div>
 
         <div class="err-text" id="reqFormErr" style="display:none"></div>
-        <button class="btn btn-primary btn-block" type="submit" id="reqSubmitBtn" style="padding:15px">${icon('send')} إرسال الطلب</button>
-        <p class="muted" style="text-align:center;margin-top:12px;line-height:1.7">الالتزام بالمعايير المعتمدة في بلدية مسقط وضوابط النشر الحكومي</p>
+        <button class="btn btn-primary btn-block" type="submit" id="reqSubmitBtn" style="padding:15px">${icon('send')} ${existing?'حفظ التعديلات':'إرسال الطلب'}</button>
+        ${existing?'':'<p class="muted" style="text-align:center;margin-top:12px;line-height:1.7">الالتزام بالمعايير المعتمدة في بلدية مسقط وضوابط النشر الحكومي</p>'}
       </form>`;
 }
 function renderRequestAddInternal(){
@@ -1204,7 +1210,26 @@ function renderRequestAddInternal(){
   ${requestFormFieldsHtml()}
   `;
 }
-function wireRequestFormCommon(onSuccess){
+function renderRequestEdit(id){
+  if(S.user.role!=='lead') return `<div class="empty-state">${icon('alert')}<h3>هذه الصفحة مخصصة للمشرف فقط</h3></div>`;
+  const r=S.requests.find(x=>x.id===id);
+  if(!r) return `<div class="empty-state">${icon('alert')}<h3>الطلب غير موجود</h3></div>`;
+  return `
+  <button class="btn btn-ghost btn-sm" id="reqEditBackBtn" style="margin-bottom:10px">${icon('chev')} رجوع</button>
+  <div class="section-title-row"><h2>تعديل الطلب ${esc(r.requestNumber||'')}</h2></div>
+  <p class="muted" style="margin-bottom:12px">تعديل بيانات الطلب الأصلية المُدخلة عند التسجيل</p>
+  ${requestFormFieldsHtml(r)}
+  `;
+}
+function wireRequestEdit(id){
+  if(S.user.role!=='lead') return;
+  $('#reqEditBackBtn').addEventListener('click',()=>go('portal-request-detail', id));
+  wireRequestFormCommon(()=>{
+    toast('تم حفظ التعديلات بنجاح');
+    go('portal-request-detail', id);
+  }, id);
+}
+function wireRequestFormCommon(onSuccess, editId){
   $all('[data-required]').forEach(input=>{
     input.addEventListener('input',()=>{
       if(input.classList.contains('field-invalid')){
@@ -1241,11 +1266,10 @@ function wireRequestFormCommon(onSuccess){
     }
     const fd=new FormData(f);
     const btn=$('#reqSubmitBtn');
+    const btnLabel=editId?'حفظ التعديلات':'إرسال الطلب';
     setLoading(btn,true);
     try{
-      const requestNumber = await nextRequestNumber();
-      const data={
-        requestNumber,
+      const editableData={
         requester:{
           directorate:fd.get('directorate')||'', transferNumber:fd.get('transferNumber')||'',
           employeeNumber:fd.get('employeeNumber')||'', employeeName:fd.get('employeeName')||''
@@ -1272,18 +1296,28 @@ function wireRequestFormCommon(onSuccess){
         },
         priority:fd.get('priority')||'medium',
         managerApproval:{ name:fd.get('managerName')||'', date:fd.get('managerDate')||'' },
-        internal:{ receivedDate:'', teamNotes:'', assignedPhotographers:[], assignedEditors:[], leadApprovalName:'', leadApprovalDate:'' },
-        beneficiary:{ name:'', date:'', notes:'' },
-        status:'submitted',
-        createdAt: serverTimestamp(), updatedAt: serverTimestamp()
       };
-      if(S.user) data.createdBy=S.user.name;
-      const newRef=await addDoc(collection(db,'requests'), data);
-      onSuccess(requestNumber, newRef.id);
+      if(editId){
+        await updateDoc(doc(db,'requests',editId),{...editableData, updatedAt:serverTimestamp()});
+        onSuccess(null, editId);
+      } else {
+        const requestNumber = await nextRequestNumber();
+        const data={
+          ...editableData,
+          requestNumber,
+          internal:{ receivedDate:'', teamNotes:'', assignedPhotographers:[], assignedEditors:[], leadApprovalName:'', leadApprovalDate:'' },
+          beneficiary:{ name:'', date:'', notes:'' },
+          status:'submitted',
+          createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+        };
+        if(S.user) data.createdBy=S.user.name;
+        const newRef=await addDoc(collection(db,'requests'), data);
+        onSuccess(requestNumber, newRef.id);
+      }
     }catch(err){
       console.error(err);
-      setLoading(btn,false,'<span>'+icon('send')+' إرسال الطلب</span>');
-      errEl.textContent='تعذر إرسال الطلب، الرجاء المحاولة مرة أخرى'; errEl.style.display='block';
+      setLoading(btn,false,'<span>'+icon('send')+' '+btnLabel+'</span>');
+      errEl.textContent=editId?'تعذر حفظ التعديلات، الرجاء المحاولة مرة أخرى':'تعذر إرسال الطلب، الرجاء المحاولة مرة أخرى'; errEl.style.display='block';
     }
   });
 }
@@ -1484,9 +1518,12 @@ function renderRequestDetail(id){
   const assignedPhotographers=(r.internal&&r.internal.assignedPhotographers)||[];
   const assignedEditors=(r.internal&&r.internal.assignedEditors)||[];
   return `
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap">
     <button class="btn btn-ghost btn-sm" data-back-nav>${icon('chev')} رجوع للطلبات</button>
-    ${(S.user.role==='lead'&&!r.deleted)?`<button class="btn btn-danger btn-sm" id="deleteReqBtn">${icon('trash')} حذف الطلب</button>`:''}
+    <div style="display:flex;gap:8px">
+      ${(S.user.role==='lead'&&!r.deleted)?`<button class="btn btn-outline btn-sm" id="editReqBtn">${icon('edit')} تعديل</button>`:''}
+      ${(S.user.role==='lead'&&!r.deleted)?`<button class="btn btn-danger btn-sm" id="deleteReqBtn">${icon('trash')} حذف الطلب</button>`:''}
+    </div>
   </div>
   ${r.deleted?`
   <div class="section" style="margin-bottom:14px;border-color:var(--red-600)">
@@ -1658,6 +1695,8 @@ function wireRequestDetail(id){
   $all('[data-back-nav]').forEach(b=>b.addEventListener('click',()=>history.back()));
   const r=S.requests.find(x=>x.id===id);
   if(!r) return;
+  const editBtn=$('#editReqBtn');
+  if(editBtn) editBtn.addEventListener('click',()=>go('portal-request-edit', id));
   const delBtn=$('#deleteReqBtn');
   if(delBtn) delBtn.addEventListener('click',async()=>{
     if(!confirm(`نقل الطلب "${r.event&&r.event.name||''}" إلى سلة المحذوفات؟ يمكن استعادته لاحقاً.`)) return;
