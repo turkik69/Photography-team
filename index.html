@@ -2164,12 +2164,19 @@ function taskStatusPillsHtml(current){
   </div>
   <input type="hidden" name="status" value="${current||'not_started'}">`;
 }
+let taskStatusPillsDelegated=false;
 function wireTaskStatusPills(){
-  $all('[data-tstatus]').forEach(b=>b.addEventListener('click',()=>{
-    $all('[data-tstatus]').forEach(x=>x.classList.remove('on'));
-    b.classList.add('on');
-    $('input[name=status]').value=b.dataset.tstatus;
-  }));
+  if(taskStatusPillsDelegated) return;
+  taskStatusPillsDelegated=true;
+  document.addEventListener('click',(e)=>{
+    const btn=e.target.closest('[data-tstatus]');
+    if(!btn) return;
+    const row=btn.closest('.radio-row');
+    if(row) $all('[data-tstatus]',row).forEach(x=>x.classList.remove('on'));
+    btn.classList.add('on');
+    const hiddenInput=$('input[name=status]');
+    if(hiddenInput) hiddenInput.value=btn.dataset.tstatus;
+  });
 }
 function renderTaskAdd(){
   return `
