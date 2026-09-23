@@ -447,6 +447,55 @@ textarea.input{resize:vertical;min-height:78px}
   h2{break-after:avoid}
   .container,.nl-sheet{max-width:none!important;padding:0!important}
 }
+
+/* Photography Team — unified desktop-first workspace, September 2026 */
+:root{--workspace-bg:#f3f6f5;--workspace-card:#fff;--workspace-accent:#176b5b;--workspace-soft:#e7f5ef;--workspace-ink:#17332c}
+html{scroll-behavior:smooth}body{background:var(--workspace-bg)}
+#app:has(.portal-layout){min-height:100vh;background:var(--workspace-bg)}
+.portal-layout{display:grid;grid-template-columns:244px minmax(0,1fr);min-height:calc(100vh - 74px);direction:rtl}
+.workspace-sidebar{background:#113c33;color:#e8faf1;padding:23px 13px 25px;position:sticky;top:74px;align-self:start;height:calc(100vh - 74px);overflow:auto;border-left:1px solid #265b4e}
+.sidebar-caption{font-size:11px;color:#b1d2c5;padding:8px 13px 13px;letter-spacing:.3px;font-weight:800}
+.sidebar-links{display:flex;flex-direction:column;gap:5px}
+.sidebar-link{display:flex;align-items:center;gap:12px;width:100%;padding:13px 14px;min-height:45px;text-align:right;color:#e6f2ed;border:1px solid transparent;background:transparent;border-radius:12px;font:inherit;font-size:13px;font-weight:750;cursor:pointer;transition:background .18s,transform .18s}
+.sidebar-link svg{width:19px;height:19px;flex-shrink:0}
+.sidebar-link:hover{background:#24584a;transform:translateX(-2px)}
+.sidebar-link.active{background:#eef9f1;color:#125042;box-shadow:0 4px 16px #071c1722}
+.sidebar-link:focus-visible,.workspace-action:focus-visible,.btn:focus-visible,.navitem:focus-visible{outline:3px solid #e9bd62;outline-offset:2px}
+.sidebar-section{border-top:1px solid #4c746966;margin:18px 7px 13px}
+.sidebar-footer{margin-top:27px;font-size:11px;line-height:1.8;color:#b1d2c5;padding:12px}
+.portal-layout .portal-main{min-width:0;max-width:100%;margin:0;padding:27px 28px 52px;background:transparent}
+.portal-layout .portal-main .container{max-width:1430px;width:100%;margin:auto;padding:0}
+.portal-layout .section,.portal-layout .stat-card,.portal-layout .card-grid>*{box-shadow:0 6px 24px #194c3e0b;border-radius:17px}
+.portal-layout .section{border-color:#e1e9e5}
+.portal-layout .section-title-row h2{letter-spacing:-.3px}
+.portal-layout .btn{border-radius:11px;min-height:39px}
+.portal-layout .input{border-radius:10px}
+.portal-layout .input:focus{outline:2px solid #4cb89844;border-color:#329b79}
+.workspace-banner{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:27px 30px;margin-bottom:19px;background:linear-gradient(115deg,#124b3e,#1d7461);border-radius:19px;color:#fff;overflow:hidden;position:relative}
+.workspace-banner:after{content:"";position:absolute;left:-35px;bottom:-105px;width:270px;height:270px;border:1px solid #ffffff25;border-radius:50%;box-shadow:0 0 0 42px #ffffff09,0 0 0 90px #ffffff08;pointer-events:none}
+.workspace-banner h2{font-size:clamp(20px,2.5vw,29px);font-weight:900;color:white;margin:4px 0 7px}
+.workspace-banner p{color:#d9f0e7;font-size:13px}
+.workspace-eyebrow{display:inline-flex;padding:5px 10px;border-radius:99px;color:#d9f8e8;background:#ffffff20;font-size:11px;font-weight:800}
+.workspace-actions{display:flex;gap:9px;flex-wrap:wrap;position:relative;z-index:1}
+.workspace-action{display:inline-flex;align-items:center;gap:7px;border:1px solid #ffffff6b;border-radius:11px;background:white;color:#175744;font:inherit;font-size:12px;font-weight:800;padding:11px 15px;cursor:pointer}
+.workspace-action.secondary{color:white;background:#ffffff17;border-color:#ffffff70}
+.workspace-action svg{width:17px;height:17px}
+.portal-layout .stat-grid{gap:14px}
+.portal-layout .stat-card{position:relative;overflow:hidden;background:#fff;border:1px solid #e1ebe6;padding:22px 20px}
+.portal-layout .stat-card:before{content:"";position:absolute;right:0;top:0;bottom:0;width:4px;background:#22866b}
+.portal-layout .stat-card.urgent:before{background:#db695e}
+.portal-layout .stat-card.gold:before{background:#d6a841}
+.portal-layout .stat-card:hover{transform:translateY(-2px);box-shadow:0 12px 24px #194c3e14}
+.portal-layout .stat-card .num{font-size:32px;font-weight:900}
+.workspace-section-top{background:#edf6f1;border:1px solid #dcece3;border-radius:14px;padding:17px 19px;margin-bottom:17px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.workspace-section-top p{font-size:12px;color:#46695c;margin-top:5px}
+.workspace-section-top h2{margin:0;font-size:20px;color:#184d3d}
+.portal-layout .topbar-menu{z-index:200}
+@media(min-width:901px){.portal-layout .bottomnav{display:none!important}.topbar{z-index:100}}
+@media(max-width:900px){.portal-layout{display:block}.workspace-sidebar{display:none}.portal-layout .portal-main{padding:17px 13px 95px}.workspace-banner{padding:21px 19px;align-items:flex-start;flex-direction:column}.workspace-banner:after{opacity:.5}.workspace-banner h2{font-size:22px}.workspace-banner .workspace-actions{width:100%}.workspace-action{justify-content:center;flex:1}.workspace-section-top{align-items:flex-start;flex-direction:column}.portal-layout .bottomnav{display:block}}
+@media(max-width:440px){.workspace-action{font-size:11px;padding:11px}.portal-layout .stat-card{padding:16px 13px}.portal-layout .stat-card .num{font-size:27px}.portal-layout .section-title-row{gap:9px;flex-wrap:wrap}}
+@media(prefers-reduced-motion:reduce){.sidebar-link,.portal-layout .stat-card{transition:none}}
+
 </style>
 </head>
 <body>
@@ -900,10 +949,36 @@ function bottomNavHtml(){
       </button>`).join('')}
   </div></div>`;
 }
+function workspaceSidebarHtml(){
+  const links=[
+    ...NAV_ITEMS,
+    {key:'portal-newsletters',label:'النشرة الشهرية',icon:'doc'},
+    ...(S.user&&S.user.role==='lead'?[
+      {key:'portal-employees',label:'إدارة الموظفين',icon:'users'},
+      {key:'portal-reports',label:'التقارير والأداء',icon:'gauge'},
+      {key:'portal-trash',label:'سلة المحذوفات',icon:'trash'}
+    ]:[]),
+    {key:'portal-account',label:'حسابي',icon:'id'}
+  ];
+  return `<aside class="workspace-sidebar" aria-label="القائمة الرئيسية">
+    <div class="sidebar-caption">مساحة عمل فريق التصوير</div>
+    <nav class="sidebar-links" aria-label="أقسام المنصة">
+      ${links.map((it,i)=>`${i===5?'<div class="sidebar-section"></div>':''}
+      <button type="button" class="sidebar-link ${S.route===it.key||(it.key==='portal-requests'&&S.route.startsWith('portal-request'))?'active':''}" data-go="${it.key}" ${S.route===it.key?'aria-current="page"':''}>
+        ${icon(it.icon)}<span>${it.label}</span>
+        ${it.key==='portal-requests'&&S.requests.filter(r=>!r.deleted&&r.status==='submitted').length?'<span style="margin-right:auto;background:#d4f2df;color:#154636;border-radius:20px;padding:1px 8px;font-size:11px">'+S.requests.filter(r=>!r.deleted&&r.status==='submitted').length+'</span>':''}
+      </button>`).join('')}
+    </nav>
+    <div class="sidebar-footer">الإشعارات داخل المنصة فقط · بيئة عمل بلدية مسقط</div>
+  </aside>`;
+}
 function portalShell(innerHtml){
   return `
   ${topbarHtml()}
-  <main class="portal-main"><div class="container">${innerHtml}</div></main>
+  <div class="portal-layout">
+    ${workspaceSidebarHtml()}
+    <main class="portal-main"><div class="container">${innerHtml}</div></main>
+  </div>
   ${bottomNavHtml()}`;
 }
 
@@ -948,7 +1023,7 @@ function render(){
   wirePortalRoute();
 }
 function wireShellEvents(){
-  $all('.topbar [data-go], .bottomnav [data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+  $all('.topbar [data-go], .bottomnav [data-go], .workspace-sidebar [data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   const av=$('#avatarBtn');
   if(av) av.addEventListener('click',(e)=>{e.stopPropagation();S.menuOpen=!S.menuOpen;S.notifMenuOpen=false;render();});
   const nb=$('#notifBellBtn');
@@ -1207,7 +1282,7 @@ function renderRequestAddInternal(){
   return `
   <button class="btn btn-ghost btn-sm" data-go="portal-requests" style="margin-bottom:10px">${icon('chev')} رجوع</button>
   <div class="section-title-row"><h2>تسجيل طلب تصوير</h2></div>
-  <p class="muted" style="margin-bottom:12px">لتسجيل طلب وصلكم بطريقة أخرى (اتصال، حضورياً...) كمرجع بالمنصة</p>
+  <p class="muted" style="margin-bottom:12px">أضف طلب التصوير مباشرة من داخل المنصة، سواء ورد من إحدى الدوائر أو عن طريق الاتصال أو الحضور.</p>
   ${requestFormFieldsHtml()}
   `;
 }
@@ -1368,10 +1443,14 @@ function renderDashboard(){
   const upcomingMeetings=S.meetings.filter(m=>m.date>=todayISO());
   const recentReq=activeReq.slice(0,5);
   return `
-  <div class="section-title-row" style="margin-top:4px">
-    <div>
+  <div class="workspace-banner">
+    <div><span class="workspace-eyebrow">لوحة أعمال الفريق · ${fmtDate(todayISO())}</span>
       <h2>مرحباً ${esc(S.user.name||'')} 👋</h2>
-      <p class="muted" style="margin-top:3px">${fmtDate(todayISO())}</p>
+      <p>طلبات التصوير والزيارات والمهام والاجتماعات في مساحة عمل واحدة.</p>
+    </div>
+    <div class="workspace-actions">
+      <button type="button" class="workspace-action" data-go="portal-request-add">${icon('plus')} طلب تصوير جديد</button>
+      <button type="button" class="workspace-action secondary" data-go="portal-visits">${icon('pin')} الزيارات الميدانية</button>
     </div>
   </div>
 
@@ -1482,8 +1561,9 @@ function requestsListDynamicHtml(){
 }
 function renderRequestsList(){
   return `
-  <div class="section-title-row"><h2>طلبات خدمات التصوير</h2>
-    <button class="btn btn-primary btn-sm" data-go="portal-request-add">${icon('plus')} تسجيل طلب</button>
+  <div class="workspace-section-top">
+    <div><h2>طلبات خدمات التصوير</h2><p>إضافة الطلبات وإسنادها ومتابعة حالتها من داخل المنصة، دون الانتقال إلى نموذج خارجي.</p></div>
+    <button class="btn btn-primary btn-sm" data-go="portal-request-add">${icon('plus')} طلب تصوير جديد</button>
   </div>
   <div class="searchbar">
     ${icon('search')}
