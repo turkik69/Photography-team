@@ -496,6 +496,38 @@ html{scroll-behavior:smooth}body{background:var(--workspace-bg)}
 @media(max-width:440px){.workspace-action{font-size:11px;padding:11px}.portal-layout .stat-card{padding:16px 13px}.portal-layout .stat-card .num{font-size:27px}.portal-layout .section-title-row{gap:9px;flex-wrap:wrap}}
 @media(prefers-reduced-motion:reduce){.sidebar-link,.portal-layout .stat-card{transition:none}}
 
+
+/* Operational upgrades — September 2026 */
+.operational-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(260px,1fr);gap:16px;margin:15px 0 23px}
+.operational-card{border:1px solid #dfe9e3;border-radius:17px;background:#fff;overflow:hidden;box-shadow:0 5px 24px #175e4510}
+.operational-card-head{padding:16px 19px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid #e7eee9}
+.operational-card-head h3{font-size:15px;color:#1b4c40;font-weight:850;margin:0}
+.operational-card-head p{font-size:11px;color:#678375;margin-top:4px}
+.operational-list{max-height:330px;overflow:auto}
+.operational-row{display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid #edf1ee;width:100%;background:white;border-top:0;border-left:0;border-right:0;cursor:pointer;text-align:right;font:inherit}
+.operational-row:hover{background:#f1faf4}
+.operational-row:last-child{border-bottom:0}
+.operational-row-main{flex:1;min-width:0}
+.operational-row-title{font-size:13px;font-weight:800;color:#244b40;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.operational-row-meta{font-size:11px;color:#647d71;margin-top:5px;display:flex;gap:8px;flex-wrap:wrap}
+.operational-date{flex:none;font-size:11px;font-weight:800;color:#2b7f64;background:#ecf7f0;padding:7px 9px;border-radius:9px;max-width:110px;text-align:center}
+.operational-empty{padding:29px 16px;text-align:center;color:#648376;font-size:13px;line-height:1.8}
+.pipeline{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:14px 0}
+.pipeline-stage{background:#f6f9f7;border:1px solid #dfece3;border-radius:12px;text-align:center;padding:13px 9px}
+.pipeline-stage strong{display:block;font-size:23px;color:#205947}
+.pipeline-stage span{font-size:11px;color:#61766d}
+.pipeline-stage.pending{background:#fff4e8;border-color:#f3dfbd}
+.pipeline-stage.pending strong{color:#95672d}
+.pipeline-stage.done{background:#e9f8ef;border-color:#cae8d5}
+.pipeline-stage.done strong{color:#24704f}
+.delivery-note{background:#f3f9f5;border-right:3px solid #318266;padding:12px 14px;margin:10px 0 14px;border-radius:9px;color:#496b5b;font-size:12px;line-height:1.8}
+.req-grid-meta{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:9px;font-size:11px;color:#567466}
+.req-grid-meta span{padding:4px 8px;background:#f1f7f3;border-radius:8px}
+.mywork-bar{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 17px}
+.mywork-bar .chip{border-radius:10px}
+@media(max-width:1050px){.operational-grid{grid-template-columns:1fr}}
+@media(max-width:550px){.pipeline{grid-template-columns:repeat(2,minmax(0,1fr))}.operational-card-head{padding:13px}.operational-row{padding:12px}}
+
 </style>
 </head>
 <body>
@@ -720,6 +752,10 @@ function authErrorMessage(err){
 /* التوجيه Router */
 let formInProgress=false; /* يمنع إعادة رسم الصفحة كاملة بسبب تحديثات لحظية غير متعلقة، بينما المستخدم يعبّئ نموذجاً طويلاً فيه بيانات غير محفوظة (كنموذج النشرة) — يُصفّر تلقائياً مع أي تنقّل */
 function go(route,param){
+  if(requestFormDirty && S.route.startsWith('portal-request') && route!==S.route){
+    if(!confirm('لديك بيانات غير محفوظة في طلب التصوير. هل تريد المغادرة دون حفظها؟')) return;
+    requestFormDirty=false;
+  }
   formInProgress=false;
   S.route=route; S.routeParam=param; S.menuOpen=false;
   location.hash='#'+route+(param?('/'+param):'');
@@ -1306,7 +1342,17 @@ function wireRequestEdit(id){
     go('portal-request-detail', id);
   }, id);
 }
+
+/* Prevent inadvertent tab closure with an unsaved request form. */
+let requestFormDirty=false;
+window.addEventListener('beforeunload',e=>{
+  if(requestFormDirty){e.preventDefault();e.returnValue='';}
+});
 function wireRequestFormCommon(onSuccess, editId){
+  requestFormDirty=false;
+  const requestFormEl=$('#reqForm');
+  if(requestFormEl) requestFormEl.addEventListener('input',()=>{requestFormDirty=true;});
+
   $all('[data-required]').forEach(input=>{
     input.addEventListener('input',()=>{
       if(input.classList.contains('field-invalid')){
@@ -1382,6 +1428,7 @@ function wireRequestFormCommon(onSuccess, editId){
         await updateDoc(doc(db,'requests',editId),{...editableData, updatedAt:serverTimestamp()});
         const localReq=S.requests.find(x=>x.id===editId);
         if(localReq) Object.assign(localReq, editableData);
+        requestFormDirty=false;
         onSuccess(null, editId);
       } else {
         const requestNumber = await nextRequestNumber();
@@ -1395,6 +1442,7 @@ function wireRequestFormCommon(onSuccess, editId){
         };
         if(S.user) data.createdBy=S.user.name;
         const newRef=await addDoc(collection(db,'requests'), data);
+        requestFormDirty=false;
         onSuccess(requestNumber, newRef.id);
       }
     }catch(err){
@@ -1434,6 +1482,55 @@ function requestServiceIcons(r){
   const map=[['photo','camera'],['video','video'],['drone','drone'],['podcast','mic'],['timelapse','clock']];
   return map.filter(([k])=>r.serviceTypes&&r.serviceTypes[k]).map(([,ic])=>icon(ic)).join('');
 }
+
+// The same request is displayed in multiple views, without duplicating Firestore records.
+function isAssignedRequest(r,employeeId){
+  const v=r.internal||{};
+  return (v.assignedPhotographers||[]).includes(employeeId)||(v.assignedEditors||[]).includes(employeeId);
+}
+function requestDueDate(r){return r.event&&r.event.date||'';}
+function pendingRequests(){return S.requests.filter(r=>!r.deleted&&r.status!=='completed');}
+function isRequestLate(r){const d=requestDueDate(r);return !!d&&d<todayISO()&&r.status!=='completed';}
+function operationalRow(item){
+  const data=item.data;
+  const route=item.kind==='request'?'portal-request-detail':item.kind==='meeting'?'portal-meeting-detail':item.kind==='visit'?'portal-visit-detail':'portal-task-detail';
+  return `<button type="button" class="operational-row" data-operational-route="${route}" data-operational-id="${esc(data.id)}">
+    <span class="operational-row-main">
+      <span class="operational-row-title" style="display:block">${esc(item.title||'بدون عنوان')}</span>
+      <span class="operational-row-meta"><span>${esc(item.type)}</span>${item.extra?'<span>· '+esc(item.extra)+'</span>':''}</span>
+    </span>
+    <span class="operational-date">${esc(item.date||'بدون تاريخ')}</span>
+  </button>`;
+}
+function upcomingWorkItems(){
+  const items=[];
+  S.requests.filter(r=>!r.deleted&&r.status!=='completed'&&requestDueDate(r)).forEach(r=>items.push({kind:'request',data:r,title:r.event.name,type:'طلب تصوير',date:requestDueDate(r),extra:statusLabel(r.status)}));
+  S.meetings.filter(m=>!m.deleted&&m.date).forEach(m=>items.push({kind:'meeting',data:m,title:m.title||'اجتماع',type:'اجتماع',date:m.date,extra:m.location||''}));
+  S.visits.filter(v=>!v.deleted&&v.date).forEach(v=>items.push({kind:'visit',data:v,title:(v.sites||[]).map(x=>x.projectName).filter(Boolean).join('، ')||'زيارة ميدانية',type:'زيارة',date:v.date}));
+  return items.filter(i=>i.date>=todayISO()).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,7);
+}
+function myWorkHtml(){
+  const mine=pendingRequests().filter(r=>isAssignedRequest(r,S.user.id)).sort((a,b)=>(requestDueDate(a)||'9999').localeCompare(requestDueDate(b)||'9999'));
+  const myTasks=S.tasks.filter(t=>!t.deleted&&((t.assignedTo||[]).includes(S.user.id)||(t.assignedTo||[]).includes(S.user.name)||t.assignedTo===S.user.id||t.assignedTo===S.user.name));
+  return `<div class="operational-grid">
+  <section class="operational-card" aria-label="الأعمال المسندة إليّ">
+    <div class="operational-card-head"><div><h3>الأعمال المسندة إليّ</h3><p>تُعرض طلبات التصوير مباشرة من نظام الطلبات دون إنشاء مهام مكررة</p></div><span class="badge badge-role-member">${mine.length+myTasks.length}</span></div>
+    <div class="operational-list">
+      ${mine.length||myTasks.length?[...mine.map(r=>({kind:'request',data:r,title:r.event&&r.event.name||'تصوير',type:isRequestLate(r)?'متأخر · تصوير':'تصوير',date:requestDueDate(r),extra:statusLabel(r.status)})),...myTasks.map(t=>({kind:'task',data:t,title:t.title||'مهمة',type:'مهمة',date:t.startDate||'',extra:t.status||''}))].map(operationalRow).join(''):'<div class="operational-empty">لا توجد طلبات تصوير أو مهام مسندة إليك حالياً.</div>'}
+    </div>
+  </section>
+  <section class="operational-card" aria-label="الأعمال القادمة">
+    <div class="operational-card-head"><div><h3>المواعيد القادمة</h3><p>طلبات التصوير والزيارات والاجتماعات في جدول موحد</p></div><span class="badge badge-role-member">٧ أيام وما بعدها</span></div>
+    <div class="operational-list">${upcomingWorkItems().map(operationalRow).join('')||'<div class="operational-empty">لا توجد مواعيد قادمة مسجلة.</div>'}</div>
+  </section></div>`;
+}
+function pipelineHtml(){
+  const req=S.requests.filter(r=>!r.deleted);
+  const stages=[['submitted','بانتظار المراجعة'],['received','تم الاستلام'],['assigned','قيد التنفيذ'],['completed','مكتمل']];
+  return `<section class="operational-card" style="margin:0 0 18px"><div class="operational-card-head"><h3>مراحل طلبات التصوير</h3><span class="muted" style="font-size:11px">جميع الطلبات الحالية</span></div><div class="pipeline" style="padding:15px">${stages.map(([status,label])=>`<div class="pipeline-stage ${status==='completed'?'done':status==='submitted'?'pending':''}"><strong>${req.filter(r=>r.status===status).length}</strong><span>${label}</span></div>`).join('')}</div></section>`;
+}
+function wireOperationalRows(){ $all('[data-operational-route]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.operationalRoute,b.dataset.operationalId))); }
+
 function renderDashboard(){
   const mKey=todayISO().slice(0,7);
   const activeReq=S.requests.filter(r=>!r.deleted);
@@ -1469,6 +1566,8 @@ function renderDashboard(){
     </button>
   </div>
 
+  ${myWorkHtml()}
+  ${S.user.role==='lead'?pipelineHtml():''}
   <div class="section-title-row">
     <h2>أحدث الطلبات</h2>
     <button class="btn btn-ghost btn-sm" data-go="portal-requests">عرض الكل ${icon('chev')}</button>
@@ -1517,6 +1616,10 @@ function requestGridCardHtml(r){
     </div>
     <div class="grid-card-title">${esc(r.event&&r.event.name||'بدون عنوان')}</div>
     <div class="grid-card-sub">${esc(r.requestNumber||'')}</div>
+    <div class="req-grid-meta"><span>${requestDueDate(r)?'موعد التصوير: '+esc(requestDueDate(r)):'الموعد غير محدد'}</span>
+      ${isRequestLate(r)?'<span style="background:#fff0e8;color:#ad422b">متأخر</span>':''}
+      <span>المكلفون: ${new Set([...(r.internal&&r.internal.assignedPhotographers||[]),...(r.internal&&r.internal.assignedEditors||[])]).size}</span>
+    </div>
   </div>`;
 }
 function meetingListItemHtml(m){
@@ -1531,6 +1634,7 @@ function meetingListItemHtml(m){
   </div>`;
 }
 function wireDashboard(){
+  wireOperationalRows();
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   $all('[data-req]').forEach(el=>el.addEventListener('click',()=>go('portal-request-detail',el.dataset.req)));
   $all('[data-meeting]').forEach(el=>el.addEventListener('click',()=>go('portal-meeting-detail',el.dataset.meeting)));
@@ -1726,6 +1830,28 @@ function renderRequestDetail(id){
     </div>
   </div>
 
+
+  <div class="section" style="margin-bottom:14px">
+    <div class="section-head">${icon('film')} الإنتاج وتسليم المخرجات</div>
+    <div class="section-body">
+      <p class="delivery-note">سجّل مرحلة إنتاج المواد وموقع حفظ النسخة المعتمدة. يُحفظ السجل ضمن طلب التصوير نفسه، ويمكن الوصول إليه من أي جهاز مصرح له.</p>
+      <form id="productionForm">
+        <div class="row2">
+          <div class="field"><label>مرحلة الإنتاج</label><select class="input" name="productionStage">
+            ${[['not_started','لم يبدأ الإنتاج'],['shooting','جاري التصوير'],['editing','المونتاج والتحرير'],['review','المراجعة النهائية'],['ready','جاهز للتسليم'],['delivered','تم التسليم']].map(([v,label])=>`<option value="${v}" ${(r.production&&r.production.stage||'not_started')===v?'selected':''}>${label}</option>`).join('')}
+          </select></div>
+          <div class="field"><label>تاريخ تسليم المخرجات</label><input class="input" type="date" name="deliveryDate" value="${esc(r.production&&r.production.deliveryDate||'')}"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>اسم الجهة / المستلم</label><input class="input" name="deliveryRecipient" value="${esc(r.production&&r.production.recipient||'')}" placeholder="الجهة التي تسلمت المواد"></div>
+          <div class="field"><label>رابط المواد المعتمدة (اختياري)</label><input class="input" type="url" name="deliveryUrl" value="${esc(r.production&&r.production.url||'')}" placeholder="https://..."></div>
+        </div>
+        <div class="field"><label>ملاحظات الإنتاج والتسليم</label><textarea class="input" name="productionNotes" rows="3">${esc(r.production&&r.production.notes||'')}</textarea></div>
+        ${r.production&&r.production.updatedBy?`<p class="hint">آخر تحديث: ${esc(r.production.updatedBy)} ${esc(r.production.updatedOn||'')}</p>`:''}
+        ${!r.deleted?'<button type="submit" class="btn btn-primary">'+icon('check')+' حفظ بيانات الإنتاج والتسليم</button>':''}
+      </form>
+    </div>
+  </div>
   <div class="section">
     <div class="section-head">${icon('doc')} المرفقات والملفات</div>
     <div class="section-body">
@@ -1831,6 +1957,26 @@ function wireRequestDetail(id){
     setLoading(btn,false,'<span>'+icon('plus')+' إضافة مرفق</span>');
   });
 
+
+  const productionForm=$('#productionForm');
+  if(productionForm) productionForm.addEventListener('submit',async(e)=>{
+    e.preventDefault();
+    if(r.deleted) return;
+    const fd=new FormData(productionForm);
+    const stage=fd.get('productionStage')||'not_started';
+    const deliveryDate=fd.get('deliveryDate')||'';
+    const recipient=(fd.get('deliveryRecipient')||'').trim();
+    if(stage==='delivered'&&(!deliveryDate||!recipient)){toast('عند اختيار تم التسليم، يرجى تحديد التاريخ واسم الجهة المستلمة',true);return;}
+    const btn=productionForm.querySelector('[type=submit]');
+    setLoading(btn,true);
+    try{
+      const production={stage,deliveryDate,recipient,url:(fd.get('deliveryUrl')||'').trim(),notes:fd.get('productionNotes')||'',updatedBy:S.user.name,updatedOn:todayISO()};
+      await updateDoc(doc(db,'requests',id),{production,updatedAt:serverTimestamp()});
+      toast('تم حفظ بيانات الإنتاج والتسليم');
+    }catch(err){console.error(err);toast('تعذر الحفظ',true);}
+    finally{setLoading(btn,false,'<span>'+icon('check')+' حفظ بيانات الإنتاج والتسليم</span>');}
+  });
+
   const iform=$('#internalForm');
   if(iform) iform.addEventListener('submit',async(e)=>{
     e.preventDefault();
@@ -1839,6 +1985,8 @@ function wireRequestDetail(id){
     const photographers=S.employees.filter(emp=>fd.has('photog_'+emp.id)).map(emp=>emp.id);
     const editors=S.employees.filter(emp=>fd.has('editor_'+emp.id)).map(emp=>emp.id);
     const receivedDate=fd.get('receivedDate')||'';
+    const oldAssigned=new Set([...(r.internal&&r.internal.assignedPhotographers||[]),...(r.internal&&r.internal.assignedEditors||[])]);
+    const newlyAssigned=[...new Set([...photographers,...editors])].filter(empId=>!oldAssigned.has(empId));
     let newStatus=r.status;
     if(receivedDate && newStatus==='submitted') newStatus='received';
     if((photographers.length||editors.length) && (newStatus==='received'||newStatus==='submitted')) newStatus='assigned';
@@ -1852,6 +2000,9 @@ function wireRequestDetail(id){
         status:newStatus,
         updatedAt:serverTimestamp()
       });
+      if(newlyAssigned.length){
+        await Promise.allSettled(newlyAssigned.map(empId=>createNotification(empId,'تم إسناد طلب تصوير لك: '+(r.event&&r.event.name||r.requestNumber||'طلب جديد'),'portal-request-detail',id)));
+      }
       toast('تم الحفظ بنجاح');
       setLoading(btn,false,'<span>'+icon('check')+' حفظ</span>');
     }catch(err){ console.error(err); setLoading(btn,false,'<span>'+icon('check')+' حفظ</span>'); toast('تعذر الحفظ',true); }
@@ -2244,6 +2395,15 @@ function renderTasksList(){
   <div class="section-title-row"><h2>جدول الأعمال</h2>
     <button class="btn btn-primary btn-sm" data-go="portal-task-add">${icon('plus')} إضافة مهمة</button>
   </div>
+
+  <section class="operational-card" style="margin-bottom:16px">
+    <div class="operational-card-head"><div><h3>مهام التصوير المرتبطة بالطلبات</h3><p>تظهر تلقائياً عند إسناد الطلب، دون إعادة تسجيل المهمة</p></div>
+      <button class="btn btn-outline btn-sm" data-go="portal-requests">إدارة الطلبات</button>
+    </div>
+    <div class="operational-list">
+      ${pendingRequests().filter(r=>isAssignedRequest(r,S.user.id)||S.user.role==='lead'&&isAssignedRequest(r,S.user.id)===false&&((r.internal&&r.internal.assignedPhotographers||[]).length||(r.internal&&r.internal.assignedEditors||[]).length)).sort((a,b)=>(requestDueDate(a)||'9999').localeCompare(requestDueDate(b)||'9999')).slice(0,25).map(r=>operationalRow({kind:'request',data:r,title:r.event&&r.event.name||'طلب تصوير',type:'تصوير مرتبط بطلب',date:requestDueDate(r),extra:statusLabel(r.status)})).join('')||'<div class="operational-empty">ستظهر هنا طلبات التصوير المسندة من قسم الطلبات.</div>'}
+    </div>
+  </section>
   <div class="chiprow" id="tasksChiprow">
     ${chips.map(([k,l])=>`<button class="chip ${filter===k?'on':''}" data-tfilter="${k}">${l}</button>`).join('')}
   </div>
@@ -2251,6 +2411,7 @@ function renderTasksList(){
     `<div class="card-grid">${list.map(t=>taskListItemHtml(t)).join('')}</div>`}`;
 }
 function wireTasksList(){
+  wireOperationalRows();
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   $all('[data-tfilter]').forEach(b=>b.addEventListener('click',()=>{S.filters.tasksStatus=b.dataset.tfilter;render();}));
   $all('[data-task]').forEach(el=>el.addEventListener('click',()=>go('portal-task-detail',el.dataset.task)));
@@ -3470,6 +3631,17 @@ function renderReports(){
       </select>
     </div>
   </div></div>
+
+  <section class="operational-card no-print" style="margin-bottom:14px">
+    <div class="operational-card-head"><h3>متابعة طلبات التصوير</h3><span class="muted">الحالة الحالية للطلبات خلال الفترة المختارة</span></div>
+    <div class="pipeline" style="padding:16px">
+      ${(()=>{
+        const p=reportPeriodBounds(S.filters.reportType,S.filters.reportValue);
+        const items=S.requests.filter(r=>!r.deleted&&requestDueDate(r)>=p.start&&requestDueDate(r)<=p.end);
+        return [['submitted','جديد'],['received','مستلم'],['assigned','تم الإسناد'],['completed','مكتمل']].map(([k,label])=>`<div class="pipeline-stage ${k==='completed'?'done':''}"><strong>${items.filter(r=>r.status===k).length}</strong><span>${label}</span></div>`).join('');
+      })()}
+    </div>
+  </section>
   <div id="reportBody">${reportBodyHtml()}</div>
   `;
 }
@@ -4198,7 +4370,7 @@ function wireReports(){
 function runBackupExport(){
   const data={
     exportedAt:new Date().toISOString(), project:'فريق التصوير - بلدية مسقط',
-    employees:S.employees, requests:S.requests, visits:S.visits, meetings:S.meetings
+    employees:S.employees, requests:S.requests, visits:S.visits, meetings:S.meetings, tasks:S.tasks, newsletters:S.newsletters
   };
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
