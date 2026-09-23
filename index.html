@@ -2034,7 +2034,7 @@ function renderVisitDetail(id){
     </div>
   </div>
   ${v.certified===false?`
-  <div class="section" style="margin-bottom:14px;border-color:var(--gold-500)">
+  <div class="section" id="visitPendingBanner" style="margin-bottom:14px;border-color:var(--gold-500)">
     <div class="section-body" style="display:flex;gap:10px;align-items:center">
       <span style="color:var(--gold-600);flex:none">${icon('alert')}</span>
       <p style="font-size:13px;line-height:1.7;color:var(--ink-700)">بانتظار اعتماد المشرف لتوثيقها ضمن أعمال الفريق الرسمية</p>
@@ -2086,7 +2086,9 @@ function wireVisitDetail(id){
       const localVisit2=S.visits.find(x=>x.id===id);
       if(localVisit2) localVisit2.certified=true;
       toast('تم اعتماد الزيارة');
-      render();
+      /* تحديث مباشر للعنصرين المتعلقين بالاعتماد فقط، بدل إعادة رسم الصفحة كاملة، حتى لا تُفقد أي تعديلات غير محفوظة بباقي النموذج */
+      const banner=$('#visitPendingBanner'); if(banner) banner.remove();
+      certifyBtn.remove();
     }catch(err){ console.error(err); setLoading(certifyBtn,false,'<span>'+icon('check')+' اعتماد</span>'); toast('تعذر الاعتماد',true); }
   });
   const delBtn=$('#deleteVisitBtn');
@@ -2261,7 +2263,7 @@ function renderTaskDetail(id){
     </div>
   </div>
   ${t.certified===false?`
-  <div class="section" style="margin-bottom:14px;border-color:var(--gold-500)">
+  <div class="section" id="taskPendingBanner" style="margin-bottom:14px;border-color:var(--gold-500)">
     <div class="section-body" style="display:flex;gap:10px;align-items:center">
       <span style="color:var(--gold-600);flex:none">${icon('alert')}</span>
       <p style="font-size:13px;line-height:1.7;color:var(--ink-700)">بانتظار اعتماد المشرف لتوثيقها ضمن أعمال الفريق الرسمية</p>
@@ -2307,7 +2309,9 @@ function wireTaskDetail(id){
       await updateDoc(doc(db,'tasks',id),{certified:true});
       if(t) t.certified=true;
       toast('تم اعتماد المهمة');
-      render();
+      /* تحديث مباشر للعنصرين المتعلقين بالاعتماد فقط، بدل إعادة رسم الصفحة كاملة، حتى لا تُفقد أي تعديلات غير محفوظة بباقي النموذج */
+      const banner=$('#taskPendingBanner'); if(banner) banner.remove();
+      certifyBtn.remove();
     }catch(err){ console.error(err); setLoading(certifyBtn,false,'<span>'+icon('check')+' اعتماد</span>'); toast('تعذر الاعتماد',true); }
   });
   const delBtn=$('#deleteTaskBtn');
@@ -2846,19 +2850,11 @@ function renderMeetingDetail(id){
         </div>
       </div>
       <div class="field"><label>حضور إضافي (خارج الفريق)</label><input class="input" name="extraAttendees" value="${esc(m.extraAttendees||'')}" placeholder="أسماء مفصولة بفاصلة"></div>
-      <div class="field" style="margin-bottom:0"><label>جدول الأعمال / المواضيع</label><textarea class="input" name="agenda">${esc(m.agenda||'')}</textarea></div>
+      <div class="field"><label>جدول الأعمال / المواضيع</label><textarea class="input" name="agenda">${esc(m.agenda||'')}</textarea></div>
+      <div class="field" style="margin-bottom:0"><label>ملاحظات / محضر الاجتماع</label><textarea class="input" name="notes" style="min-height:120px">${esc(m.notes||'')}</textarea></div>
+      <button class="btn btn-primary btn-block" type="submit" style="padding:15px;margin-top:16px">${icon('check')} حفظ تعديلات الاجتماع</button>
     </form>
-  </div></div>
-  <div class="section" style="margin-bottom:20px">
-    <div class="section-head">${icon('edit')} ملاحظات / محضر الاجتماع</div>
-    <div class="section-body">
-      <form id="meetingNotesForm">
-        <textarea class="input" name="notes" style="min-height:120px">${esc(m.notes||'')}</textarea>
-        <button class="btn btn-outline" type="submit" style="margin-top:10px">${icon('check')} حفظ الملاحظات</button>
-      </form>
-    </div>
-  </div>
-  <button class="btn btn-primary btn-block no-print" type="submit" form="meetingEditForm" style="padding:15px;margin-bottom:20px">${icon('check')} حفظ تعديلات الاجتماع</button>`;
+  </div></div>`;
 }
 function wireMeetingDetail(id){
   formInProgress=true;
@@ -2868,7 +2864,7 @@ function wireMeetingDetail(id){
   const editForm=$('#meetingEditForm');
   if(editForm) editForm.addEventListener('submit',async(e)=>{
     e.preventDefault();
-    const btn=document.querySelector('button[form=meetingEditForm]');
+    const btn=e.target.querySelector('[type=submit]');
     const fd=new FormData(e.target);
     const attendees=S.employees.filter(emp=>fd.has('att_'+emp.id)).map(emp=>emp.id);
     /* قراءة التاريخ مباشرة من عنصر الإدخال كإجراء احترازي إضافي، بدل الاعتماد حصراً على FormData */
@@ -2876,36 +2872,22 @@ function wireMeetingDetail(id){
     const newTitle=fd.get('title')||'';
     const newDate=(dateEl?dateEl.value:fd.get('date'))||'';
     const newStartTime=fd.get('startTime')||'', newEndTime=fd.get('endTime')||'';
-    const newLocation=fd.get('location')||'', newExtra=fd.get('extraAttendees')||'', newAgenda=fd.get('agenda')||'';
+    const newLocation=fd.get('location')||'', newExtra=fd.get('extraAttendees')||'', newAgenda=fd.get('agenda')||'', newNotes=fd.get('notes')||'';
     setLoading(btn,true);
     try{
       await updateDoc(doc(db,'meetings',id),{
         title:newTitle, date:newDate, startTime:newStartTime, endTime:newEndTime,
-        location:newLocation, attendees, extraAttendees:newExtra, agenda:newAgenda,
+        location:newLocation, attendees, extraAttendees:newExtra, agenda:newAgenda, notes:newNotes,
         updatedAt:serverTimestamp()
       });
       const localMeeting=S.meetings.find(x=>x.id===id);
       if(localMeeting){
         localMeeting.title=newTitle; localMeeting.date=newDate; localMeeting.startTime=newStartTime; localMeeting.endTime=newEndTime;
-        localMeeting.location=newLocation; localMeeting.attendees=attendees; localMeeting.extraAttendees=newExtra; localMeeting.agenda=newAgenda;
+        localMeeting.location=newLocation; localMeeting.attendees=attendees; localMeeting.extraAttendees=newExtra; localMeeting.agenda=newAgenda; localMeeting.notes=newNotes;
       }
       toast('تم حفظ تعديلات الاجتماع');
       setLoading(btn,false,'<span>'+icon('check')+' حفظ تعديلات الاجتماع</span>');
     }catch(err){ console.error(err); setLoading(btn,false,'<span>'+icon('check')+' حفظ تعديلات الاجتماع</span>'); toast('تعذر الحفظ',true); }
-  });
-  const f=$('#meetingNotesForm');
-  if(f) f.addEventListener('submit',async(e)=>{
-    e.preventDefault();
-    const btn=e.target.querySelector('[type=submit]');
-    const newNotes=new FormData(e.target).get('notes')||'';
-    setLoading(btn,true);
-    try{
-      await updateDoc(doc(db,'meetings',id),{notes:newNotes, updatedAt:serverTimestamp()});
-      const localMeeting=S.meetings.find(x=>x.id===id);
-      if(localMeeting) localMeeting.notes=newNotes;
-      toast('تم حفظ الملاحظات');
-      setLoading(btn,false,'<span>'+icon('check')+' حفظ الملاحظات</span>');
-    }catch(err){ console.error(err); setLoading(btn,false,'<span>'+icon('check')+' حفظ الملاحظات</span>'); toast('تعذر الحفظ',true); }
   });
 }
 
@@ -4209,6 +4191,7 @@ function renderAccount(){
   </div>`;
 }
 function wireAccount(){
+  formInProgress=true;
   $('#changePhotoBtn').addEventListener('click',()=>$('#photoFileInput').click());
   $('#photoFileInput').addEventListener('change', async (e)=>{
     const file=e.target.files[0];
