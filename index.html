@@ -1537,7 +1537,7 @@ function renderDashboard(){
   const newReq=activeReq.filter(r=>r.status==='submitted').length;
   const urgentReq=activeReq.filter(r=>r.priority==='urgent'&&r.status!=='completed').length;
   const visitsThisMonth=S.visits.filter(v=>monthKey(v.date)===mKey).length;
-  const upcomingMeetings=S.meetings.filter(m=>m.date>=todayISO());
+  const upcomingMeetings=S.meetings.filter(m=>!m.deleted&&m.date>=todayISO());
   const recentReq=activeReq.slice(0,5);
   return `
   <div class="workspace-banner">
@@ -2609,7 +2609,7 @@ function wireTaskDetail(id){
 function trashItemHtml(kind,id,title,deletedBy,sub){
   return `
   <div class="list-item" style="cursor:default;flex-wrap:wrap">
-    <div class="list-item-icon">${icon(kind==='req'?'doc':'tasks')}</div>
+    <div class="list-item-icon">${icon(kind==='req'?'doc':kind==='meeting'?'users':'tasks')}</div>
     <div class="list-item-body">
       <div class="list-item-title">${esc(title||'بدون عنوان')}</div>
       <div class="list-item-sub">${sub?esc(sub)+' · ':''}${deletedBy?'حذفه '+esc(deletedBy):''}</div>
@@ -2624,7 +2624,8 @@ function renderTrash(){
   if(S.user.role!=='lead') return `<div class="empty-state">${icon('alert')}<h3>هذه الصفحة مخصصة للمشرف فقط</h3></div>`;
   const deletedReq=S.requests.filter(r=>r.deleted);
   const deletedTasks=S.tasks.filter(t=>t.deleted);
-  const total=deletedReq.length+deletedTasks.length;
+  const deletedMeetings=S.meetings.filter(m=>m.deleted);
+  const total=deletedReq.length+deletedTasks.length+deletedMeetings.length;
   return `
   <div class="section-title-row"><h2>سلة المحذوفات</h2></div>
   ${total===0?`<div class="section"><div class="empty-state">${icon('trash')}<h3>سلة المحذوفات فارغة</h3></div></div>`:''}
@@ -2638,12 +2639,17 @@ function renderTrash(){
   <div class="section">
     ${deletedTasks.map(t=>trashItemHtml('task',t.id,t.title,t.deletedBy)).join('')}
   </div>`:''}
+  ${deletedMeetings.length?`
+  <div class="section-title-row"><h2 style="font-size:14px">الاجتماعات المحذوفة (${deletedMeetings.length})</h2></div>
+  <div class="section">
+    ${deletedMeetings.map(m=>trashItemHtml('meeting',m.id,m.title,m.deletedBy,m.date)).join('')}
+  </div>`:''}
   `;
 }
 function wireTrash(){
   $all('[data-restore]').forEach(b=>b.addEventListener('click',async()=>{
     const [kind,id]=b.dataset.restore.split(':');
-    const coll=kind==='req'?'requests':'tasks';
+    const coll=kind==='req'?'requests':kind==='meeting'?'meetings':'tasks';
     try{
       await updateDoc(doc(db,coll,id),{deleted:false, deletedAt:null, deletedBy:null});
       toast('تمت الاستعادة بنجاح');
@@ -2651,7 +2657,7 @@ function wireTrash(){
   }));
   $all('[data-purge]').forEach(b=>b.addEventListener('click',async()=>{
     const [kind,id]=b.dataset.purge.split(':');
-    const coll=kind==='req'?'requests':'tasks';
+    const coll=kind==='req'?'requests':kind==='meeting'?'meetings':'tasks';
     if(!confirm('حذف نهائي، لا يمكن التراجع عنه بعد ذلك. المتابعة؟')) return;
     try{
       await deleteDoc(doc(db,coll,id));
@@ -2995,7 +3001,7 @@ function openImportModal(){
 function renderMeetingsList(){
   const now=todayISO();
   const filter=S.filters.meetingsTab||'upcoming';
-  let list=S.meetings.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  let list=S.meetings.filter(m=>!m.deleted).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   if(filter==='upcoming'){ list=list.filter(m=>m.date>=now); }
   else { list=list.filter(m=>m.date<now).reverse(); }
   return `
@@ -3074,7 +3080,11 @@ function renderMeetingDetail(id){
   const m=S.meetings.find(x=>x.id===id);
   if(!m) return `<div class="empty-state">${icon('alert')}<h3>الاجتماع غير موجود</h3></div>`;
   return `
-  <button class="btn btn-ghost btn-sm" data-back-nav style="margin-bottom:10px">${icon('chev')} رجوع</button>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+    <button class="btn btn-ghost btn-sm" data-back-nav>${icon('chev')} رجوع</button>
+    ${S.user.role==='lead'&&!m.deleted?`<button type="button" class="btn btn-danger btn-sm" id="deleteMeetingBtn">${icon('trash')} حذف الاجتماع</button>`:''}
+  </div>
+  ${m.deleted?'<div class="delivery-note">هذا الاجتماع في سلة المحذوفات، ويمكن للمشرف استعادته منها.</div>':''}
   <div class="section" style="margin-bottom:20px"><div class="section-body">
     <form id="meetingEditForm">
       <div class="field"><label>عنوان الاجتماع</label><input class="input" name="title" value="${esc(m.title||'')}" required></div>
@@ -3102,8 +3112,22 @@ function wireMeetingDetail(id){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   $all('[data-back-nav]').forEach(b=>b.addEventListener('click',()=>history.back()));
   $all('[data-tile] input[type=checkbox]').forEach(cb=>cb.addEventListener('change',()=>cb.closest('[data-tile]').classList.toggle('on',cb.checked)));
+  const deleteMeetingBtn=$('#deleteMeetingBtn');
+  if(deleteMeetingBtn) deleteMeetingBtn.addEventListener('click',async()=>{
+    if(S.user.role!=='lead') return;
+    const meeting=S.meetings.find(x=>x.id===id);
+    if(!meeting||meeting.deleted) return;
+    if(!confirm('هل تريد نقل الاجتماع «'+(meeting.title||'بدون عنوان')+'» إلى سلة المحذوفات؟ يمكن استعادته لاحقاً.')) return;
+    setLoading(deleteMeetingBtn,true);
+    try{
+      await updateDoc(doc(db,'meetings',id),{deleted:true,deletedBy:S.user.name,deletedAt:serverTimestamp(),updatedAt:serverTimestamp()});
+      toast('تم نقل الاجتماع إلى سلة المحذوفات');
+      go('portal-meetings');
+    }catch(err){console.error(err);toast('تعذر حذف الاجتماع، تحقق من الصلاحيات',true);setLoading(deleteMeetingBtn,false,'<span>'+icon('trash')+' حذف الاجتماع</span>');}
+  });
   const editForm=$('#meetingEditForm');
-  if(editForm) editForm.addEventListener('submit',async(e)=>{
+  if(editForm&&S.meetings.find(m=>m.id===id)?.deleted) editForm.querySelectorAll('input,textarea,button,select').forEach(el=>el.disabled=true);
+  if(editForm&&!S.meetings.find(m=>m.id===id)?.deleted) editForm.addEventListener('submit',async(e)=>{
     e.preventDefault();
     const btn=e.target.querySelector('[type=submit]');
     const fd=new FormData(e.target);
