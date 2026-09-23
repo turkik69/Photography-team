@@ -1268,6 +1268,10 @@ function wireRequestFormCommon(onSuccess, editId){
     const fd=new FormData(f);
     const btn=$('#reqSubmitBtn');
     const btnLabel=editId?'حفظ التعديلات':'إرسال الطلب';
+    /* قراءة التواريخ مباشرة من عناصر الإدخال كإجراء احترازي إضافي، بدل الاعتماد حصراً على FormData */
+    const eventDateEl=f.querySelector('[name=eventDate]'), managerDateEl=f.querySelector('[name=managerDate]');
+    const eventDateVal=(eventDateEl?eventDateEl.value:fd.get('eventDate'))||'';
+    const managerDateVal=(managerDateEl?managerDateEl.value:fd.get('managerDate'))||'';
     setLoading(btn,true);
     try{
       const editableData={
@@ -1277,7 +1281,7 @@ function wireRequestFormCommon(onSuccess, editId){
         },
         event:{
           name:fd.get('eventName')||'', description:fd.get('eventDesc')||'',
-          date:fd.get('eventDate')||'', startTime:fd.get('startTime')||'', endTime:fd.get('endTime')||'',
+          date:eventDateVal, startTime:fd.get('startTime')||'', endTime:fd.get('endTime')||'',
           location:fd.get('location')||''
         },
         serviceTypes:{
@@ -1296,10 +1300,12 @@ function wireRequestFormCommon(onSuccess, editId){
           notes:fd.get('extraNotes')||''
         },
         priority:fd.get('priority')||'medium',
-        managerApproval:{ name:fd.get('managerName')||'', date:fd.get('managerDate')||'' },
+        managerApproval:{ name:fd.get('managerName')||'', date:managerDateVal },
       };
       if(editId){
         await updateDoc(doc(db,'requests',editId),{...editableData, updatedAt:serverTimestamp()});
+        const localReq=S.requests.find(x=>x.id===editId);
+        if(localReq) Object.assign(localReq, editableData);
         onSuccess(null, editId);
       } else {
         const requestNumber = await nextRequestNumber();
@@ -1948,7 +1954,8 @@ function wireVisitAdd(){
       };
     });
     const conductedBy=collectCheckedEmployeeNames(fd,'cond');
-    const visitDate=fd.get('visitDate');
+    const visitDateEl=e.target.querySelector('[name=visitDate]');
+    const visitDate=(visitDateEl?visitDateEl.value:fd.get('visitDate'))||'';
     const assignTo=fd.get('assignTo')||'';
     const assignedEmp=assignTo?S.employees.find(x=>x.id===assignTo):null;
     /* المهمة المسندة تُحتسب من ضمن أعمال الموظف المكلّف بها، وليست ضمن أعمال المشرف المُسنِد،
@@ -2101,10 +2108,14 @@ function wireVisitDetail(id){
       };
     });
     const conductedBy=collectCheckedEmployeeNames(fd,'cond');
-    const visitDate=fd.get('visitDate')||'';
+    /* قراءة التاريخ مباشرة من عنصر الإدخال كإجراء احترازي إضافي، بدل الاعتماد حصراً على FormData */
+    const dateEl=e.target.querySelector('[name=visitDate]');
+    const visitDate=(dateEl?dateEl.value:fd.get('visitDate'))||'';
     setLoading(btn,true);
     try{
       await updateDoc(doc(db,'visits',id),{date:visitDate, sites, conductedBy, updatedAt:serverTimestamp()});
+      const localVisit=S.visits.find(x=>x.id===id);
+      if(localVisit){ localVisit.date=visitDate; localVisit.sites=sites; localVisit.conductedBy=conductedBy; }
       toast('تم حفظ التعديلات بنجاح');
       if(visitDate) S.filters.visitsMonth=monthKey(visitDate);
       go('portal-visits');
@@ -2211,10 +2222,13 @@ function wireTaskAdd(){
     const btn=e.target.querySelector('[type=submit]');
     const fd=new FormData(e.target);
     const responsible=collectCheckedEmployeeNames(fd,'resp');
+    const startDateEl=e.target.querySelector('[name=startDate]'), endDateEl=e.target.querySelector('[name=endDate]');
+    const startDate=(startDateEl?startDateEl.value:fd.get('startDate'))||'';
+    const endDate=(endDateEl?endDateEl.value:fd.get('endDate'))||'';
     setLoading(btn,true);
     try{
       await addDoc(collection(db,'tasks'),{
-        title:fd.get('title')||'', startDate:fd.get('startDate')||'', endDate:fd.get('endDate')||'',
+        title:fd.get('title')||'', startDate, endDate,
         responsible, status:fd.get('status')||'in_progress', notes:fd.get('notes')||'',
         certified:S.user.role==='lead', createdBy:S.user.name, createdAt:serverTimestamp()
       });
@@ -2307,13 +2321,26 @@ function wireTaskDetail(id){
     const btn=e.target.querySelector('[type=submit]');
     const fd=new FormData(f);
     const responsible=collectCheckedEmployeeNames(fd,'resp');
+    /* قراءة التواريخ مباشرة من عنصر الإدخال كإجراء احترازي إضافي، بدل الاعتماد حصراً على FormData */
+    const startDateEl=f.querySelector('[name=startDate]'), endDateEl=f.querySelector('[name=endDate]');
+    const newTitle=fd.get('title')||'';
+    const newStartDate=(startDateEl?startDateEl.value:fd.get('startDate'))||'';
+    const newEndDate=(endDateEl?endDateEl.value:fd.get('endDate'))||'';
+    const newStatus=fd.get('status')||'not_started';
+    const newNotes=fd.get('notes')||'';
     setLoading(btn,true);
     try{
       await updateDoc(doc(db,'tasks',id),{
-        title:fd.get('title')||'', startDate:fd.get('startDate')||'', endDate:fd.get('endDate')||'',
-        responsible, status:fd.get('status')||'not_started', notes:fd.get('notes')||'',
+        title:newTitle, startDate:newStartDate, endDate:newEndDate,
+        responsible, status:newStatus, notes:newNotes,
         updatedAt:serverTimestamp()
       });
+      /* تحديث فوري للنسخة المحلية حتى تنعكس القيم الجديدة بالواجهة مباشرة بغض النظر عن توقيت وصول التحديث اللحظي */
+      const localTask=S.tasks.find(x=>x.id===id);
+      if(localTask){
+        localTask.title=newTitle; localTask.startDate=newStartDate; localTask.endDate=newEndDate;
+        localTask.responsible=responsible; localTask.status=newStatus; localTask.notes=newNotes;
+      }
       toast('تم حفظ التعديلات');
       setLoading(btn,false,'<span>'+icon('check')+' حفظ التعديلات</span>');
     }catch(err){ console.error(err); setLoading(btn,false,'<span>'+icon('check')+' حفظ التعديلات</span>'); toast('تعذر الحفظ',true); }
@@ -2767,10 +2794,12 @@ function wireMeetingAdd(){
     const btn=e.target.querySelector('[type=submit]');
     const fd=new FormData(e.target);
     const attendees=S.employees.filter(emp=>fd.has('att_'+emp.id)).map(emp=>emp.id);
+    const dateEl=e.target.querySelector('[name=date]');
+    const dateVal=(dateEl?dateEl.value:fd.get('date'))||'';
     setLoading(btn,true);
     try{
       await addDoc(collection(db,'meetings'),{
-        title:fd.get('title')||'', date:fd.get('date'), startTime:fd.get('startTime')||'', endTime:fd.get('endTime')||'',
+        title:fd.get('title')||'', date:dateVal, startTime:fd.get('startTime')||'', endTime:fd.get('endTime')||'',
         location:fd.get('location')||'', attendees, extraAttendees:fd.get('extraAttendees')||'',
         agenda:fd.get('agenda')||'', notes:fd.get('notes')||'',
         createdBy:S.user.name, createdAt:serverTimestamp()
@@ -2787,21 +2816,27 @@ function wireMeetingAdd(){
 function renderMeetingDetail(id){
   const m=S.meetings.find(x=>x.id===id);
   if(!m) return `<div class="empty-state">${icon('alert')}<h3>الاجتماع غير موجود</h3></div>`;
-  const attNames=(m.attendees||[]).map(aid=>{const e=S.employees.find(x=>x.id===aid);return e?e.name:null;}).filter(Boolean);
-  const extraList=(m.extraAttendees||'').split(',').map(s=>s.trim()).filter(Boolean);
   return `
-  <button class="btn btn-ghost btn-sm" data-back-nav>${icon('chev')} رجوع</button>
-  <div class="section" style="margin-bottom:14px"><div class="section-body">
-    <div style="font-size:17px;font-weight:800;margin-bottom:8px">${esc(m.title)}</div>
-    <div class="kv"><span class="k">التاريخ</span><span class="v">${fmtDate(m.date)}</span></div>
-    ${m.startTime?`<div class="kv"><span class="k">الوقت</span><span class="v">${esc(m.startTime)}${m.endTime?' - '+esc(m.endTime):''}</span></div>`:''}
-    ${m.location?`<div class="kv"><span class="k">المكان</span><span class="v">${esc(m.location)}</span></div>`:''}
+  <button class="btn btn-ghost btn-sm" data-back-nav style="margin-bottom:10px">${icon('chev')} رجوع</button>
+  <div class="section" style="margin-bottom:20px"><div class="section-body">
+    <form id="meetingEditForm">
+      <div class="field"><label>عنوان الاجتماع</label><input class="input" name="title" value="${esc(m.title||'')}" required></div>
+      <div class="row3">
+        <div class="field"><label>التاريخ</label><input class="input" type="date" name="date" value="${esc(m.date||'')}" required></div>
+        <div class="field"><label>وقت البداية</label><input class="input" type="time" name="startTime" value="${esc(m.startTime||'')}"></div>
+        <div class="field"><label>وقت النهاية</label><input class="input" type="time" name="endTime" value="${esc(m.endTime||'')}"></div>
+      </div>
+      <div class="field"><label>المكان</label><input class="input" name="location" value="${esc(m.location||'')}" placeholder="مثال: قاعة الاجتماعات - مبنى البلدية"></div>
+      <div class="field">
+        <label>الحضور من الفريق</label>
+        <div class="check-grid">
+          ${S.employees.map(e=>`<label class="check-tile ${(m.attendees||[]).includes(e.id)?'on':''}" data-tile><input type="checkbox" name="att_${e.id}" ${(m.attendees||[]).includes(e.id)?'checked':''}><span class="avatar-sm">${avatarInner(e)}</span>${empTileLabel(e)}</label>`).join('')||'<p class="muted">لا يوجد موظفون بعد</p>'}
+        </div>
+      </div>
+      <div class="field"><label>حضور إضافي (خارج الفريق)</label><input class="input" name="extraAttendees" value="${esc(m.extraAttendees||'')}" placeholder="أسماء مفصولة بفاصلة"></div>
+      <div class="field" style="margin-bottom:0"><label>جدول الأعمال / المواضيع</label><textarea class="input" name="agenda">${esc(m.agenda||'')}</textarea></div>
+    </form>
   </div></div>
-  ${(attNames.length||extraList.length)?`
-  <div class="section"><div class="section-head">${icon('users')} الحضور</div><div class="section-body">
-    <div class="tag-list">${attNames.map(n=>`<span>${esc(n)}</span>`).join('')}${extraList.map(n=>`<span>${esc(n)}</span>`).join('')}</div>
-  </div></div>`:''}
-  ${m.agenda?`<div class="section"><div class="section-head">${icon('doc')} جدول الأعمال</div><div class="section-body"><p style="line-height:1.7;font-size:13.5px">${esc(m.agenda)}</p></div></div>`:''}
   <div class="section" style="margin-bottom:20px">
     <div class="section-head">${icon('edit')} ملاحظات / محضر الاجتماع</div>
     <div class="section-body">
@@ -2810,18 +2845,51 @@ function renderMeetingDetail(id){
         <button class="btn btn-outline" type="submit" style="margin-top:10px">${icon('check')} حفظ الملاحظات</button>
       </form>
     </div>
-  </div>`;
+  </div>
+  <button class="btn btn-primary btn-block no-print" type="submit" form="meetingEditForm" style="padding:15px;margin-bottom:20px">${icon('check')} حفظ تعديلات الاجتماع</button>`;
 }
 function wireMeetingDetail(id){
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   $all('[data-back-nav]').forEach(b=>b.addEventListener('click',()=>history.back()));
+  $all('[data-tile] input[type=checkbox]').forEach(cb=>cb.addEventListener('change',()=>cb.closest('[data-tile]').classList.toggle('on',cb.checked)));
+  const editForm=$('#meetingEditForm');
+  if(editForm) editForm.addEventListener('submit',async(e)=>{
+    e.preventDefault();
+    const btn=document.querySelector('button[form=meetingEditForm]');
+    const fd=new FormData(e.target);
+    const attendees=S.employees.filter(emp=>fd.has('att_'+emp.id)).map(emp=>emp.id);
+    /* قراءة التاريخ مباشرة من عنصر الإدخال كإجراء احترازي إضافي، بدل الاعتماد حصراً على FormData */
+    const dateEl=e.target.querySelector('[name=date]');
+    const newTitle=fd.get('title')||'';
+    const newDate=(dateEl?dateEl.value:fd.get('date'))||'';
+    const newStartTime=fd.get('startTime')||'', newEndTime=fd.get('endTime')||'';
+    const newLocation=fd.get('location')||'', newExtra=fd.get('extraAttendees')||'', newAgenda=fd.get('agenda')||'';
+    setLoading(btn,true);
+    try{
+      await updateDoc(doc(db,'meetings',id),{
+        title:newTitle, date:newDate, startTime:newStartTime, endTime:newEndTime,
+        location:newLocation, attendees, extraAttendees:newExtra, agenda:newAgenda,
+        updatedAt:serverTimestamp()
+      });
+      const localMeeting=S.meetings.find(x=>x.id===id);
+      if(localMeeting){
+        localMeeting.title=newTitle; localMeeting.date=newDate; localMeeting.startTime=newStartTime; localMeeting.endTime=newEndTime;
+        localMeeting.location=newLocation; localMeeting.attendees=attendees; localMeeting.extraAttendees=newExtra; localMeeting.agenda=newAgenda;
+      }
+      toast('تم حفظ تعديلات الاجتماع');
+      setLoading(btn,false,'<span>'+icon('check')+' حفظ تعديلات الاجتماع</span>');
+    }catch(err){ console.error(err); setLoading(btn,false,'<span>'+icon('check')+' حفظ تعديلات الاجتماع</span>'); toast('تعذر الحفظ',true); }
+  });
   const f=$('#meetingNotesForm');
   if(f) f.addEventListener('submit',async(e)=>{
     e.preventDefault();
     const btn=e.target.querySelector('[type=submit]');
+    const newNotes=new FormData(e.target).get('notes')||'';
     setLoading(btn,true);
     try{
-      await updateDoc(doc(db,'meetings',id),{notes:new FormData(e.target).get('notes')||'', updatedAt:serverTimestamp()});
+      await updateDoc(doc(db,'meetings',id),{notes:newNotes, updatedAt:serverTimestamp()});
+      const localMeeting=S.meetings.find(x=>x.id===id);
+      if(localMeeting) localMeeting.notes=newNotes;
       toast('تم حفظ الملاحظات');
       setLoading(btn,false,'<span>'+icon('check')+' حفظ الملاحظات</span>');
     }catch(err){ console.error(err); setLoading(btn,false,'<span>'+icon('check')+' حفظ الملاحظات</span>'); toast('تعذر الحفظ',true); }
