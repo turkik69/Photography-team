@@ -1224,6 +1224,7 @@ function renderRequestEdit(id){
 }
 function wireRequestEdit(id){
   if(S.user.role!=='lead') return;
+  formInProgress=true;
   $('#reqEditBackBtn').addEventListener('click',()=>go('portal-request-detail', id));
   wireRequestFormCommon(()=>{
     toast('تم حفظ التعديلات بنجاح');
@@ -1329,6 +1330,7 @@ function wireRequestFormCommon(onSuccess, editId){
   });
 }
 function wireRequestAddInternal(){
+  formInProgress=true;
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   wireRequestFormCommon((requestNumber, requestId)=>{
     toast(`تم تسجيل الطلب ${requestNumber} بنجاح`);
@@ -1928,6 +1930,7 @@ function wireSiteRow(idx){
   if(rm) rm.addEventListener('click',()=>row.remove());
 }
 function wireVisitAdd(){
+  formInProgress=true;
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   visitSiteRows=1;
   wireSiteRow(0);
@@ -2061,6 +2064,7 @@ function renderVisitDetail(id){
   `;
 }
 function wireVisitDetail(id){
+  formInProgress=true;
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   $all('[data-back-nav]').forEach(b=>b.addEventListener('click',()=>history.back()));
   const v=S.visits.find(x=>x.id===id);
@@ -2079,7 +2083,10 @@ function wireVisitDetail(id){
     setLoading(certifyBtn,true);
     try{
       await updateDoc(doc(db,'visits',id),{certified:true});
+      const localVisit2=S.visits.find(x=>x.id===id);
+      if(localVisit2) localVisit2.certified=true;
       toast('تم اعتماد الزيارة');
+      render();
     }catch(err){ console.error(err); setLoading(certifyBtn,false,'<span>'+icon('check')+' اعتماد</span>'); toast('تعذر الاعتماد',true); }
   });
   const delBtn=$('#deleteVisitBtn');
@@ -2214,6 +2221,7 @@ function renderTaskAdd(){
   </form>`;
 }
 function wireTaskAdd(){
+  formInProgress=true;
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   wireTaskStatusPills();
   wireEmployeeCheckTiles();
@@ -2286,6 +2294,7 @@ function renderTaskDetail(id){
   </div></div>`;
 }
 function wireTaskDetail(id){
+  formInProgress=true;
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   $all('[data-back-nav]').forEach(b=>b.addEventListener('click',()=>history.back()));
   wireTaskStatusPills();
@@ -2296,7 +2305,9 @@ function wireTaskDetail(id){
     setLoading(certifyBtn,true);
     try{
       await updateDoc(doc(db,'tasks',id),{certified:true});
+      if(t) t.certified=true;
       toast('تم اعتماد المهمة');
+      render();
     }catch(err){ console.error(err); setLoading(certifyBtn,false,'<span>'+icon('check')+' اعتماد</span>'); toast('تعذر الاعتماد',true); }
   });
   const delBtn=$('#deleteTaskBtn');
@@ -2787,6 +2798,7 @@ function renderMeetingAdd(){
   </form>`;
 }
 function wireMeetingAdd(){
+  formInProgress=true;
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   $all('[data-tile] input[type=checkbox]').forEach(cb=>cb.addEventListener('change',()=>cb.closest('[data-tile]').classList.toggle('on',cb.checked)));
   $('#meetingForm').addEventListener('submit',async(e)=>{
@@ -2849,6 +2861,7 @@ function renderMeetingDetail(id){
   <button class="btn btn-primary btn-block no-print" type="submit" form="meetingEditForm" style="padding:15px;margin-bottom:20px">${icon('check')} حفظ تعديلات الاجتماع</button>`;
 }
 function wireMeetingDetail(id){
+  formInProgress=true;
   $all('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   $all('[data-back-nav]').forEach(b=>b.addEventListener('click',()=>history.back()));
   $all('[data-tile] input[type=checkbox]').forEach(cb=>cb.addEventListener('change',()=>cb.closest('[data-tile]').classList.toggle('on',cb.checked)));
