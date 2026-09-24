@@ -664,6 +664,22 @@ function lastLoginLabel(e){
   if(daysAgo<30) return `آخر دخول: قبل ${daysAgo} يوم`;
   return `آخر دخول: ${fmtDateShort(iso)}`;
 }
+function normalizeDateField(input){
+  if(!input) return '';
+  const raw=(input.value||'').trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  if(input.valueAsDate && !Number.isNaN(input.valueAsDate.getTime())){
+    const d=input.valueAsDate;
+    const y=d.getUTCFullYear(), m=String(d.getUTCMonth()+1).padStart(2,'0'), day=String(d.getUTCDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  }
+  const m=raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if(m){
+    const a=Number(m[1]), b=Number(m[2]), y=Number(m[3]);
+    if(a>=1&&a<=31&&b>=1&&b<=12) return `${y}-${String(b).padStart(2,'0')}-${String(a).padStart(2,'0')}`;
+  }
+  return raw;
+}
 function monthKey(iso){ if(!iso) return ''; return iso.slice(0,7); }
 function monthLabel(key){
   if(!key) return '';
@@ -2131,7 +2147,7 @@ function renderVisitAdd(){
   return `
   <button class="btn btn-ghost btn-sm" data-go="portal-visits" style="margin-bottom:10px">${icon('chev')} رجوع</button>
   <div class="section-title-row"><h2>إضافة زيارة</h2></div>
-  <form id="visitForm">
+  <form id="visitForm" novalidate>
     <div class="section" style="margin-bottom:14px">
       <div class="section-body">
         <div class="field"><label>تاريخ الزيارة</label><input class="input" type="date" name="visitDate" value="${todayISO()}" required></div>
@@ -2195,7 +2211,10 @@ function wireVisitAdd(){
     });
     const conductedBy=collectCheckedEmployeeNames(fd,'cond');
     const visitDateEl=e.target.querySelector('[name=visitDate]');
-    const visitDate=(visitDateEl?visitDateEl.value:fd.get('visitDate'))||'';
+    const visitDate=normalizeDateField(visitDateEl);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(visitDate)){ toast('يرجى اختيار تاريخ صحيح للزيارة',true); visitDateEl?.focus(); return; }
+    const missingSite=sites.find(x=>!(x.projectName||'').trim()||!(x.location||'').trim());
+    if(missingSite){ toast('يرجى تعبئة اسم المشروع والموقع قبل الحفظ',true); return; }
     const assignTo=fd.get('assignTo')||'';
     const assignedEmp=assignTo?S.employees.find(x=>x.id===assignTo):null;
     /* المهمة المسندة تُحتسب من ضمن أعمال الموظف المكلّف بها، وليست ضمن أعمال المشرف المُسنِد،
@@ -2284,7 +2303,7 @@ function renderVisitDetail(id){
       <p style="font-size:13px;line-height:1.7;color:var(--ink-700)">هذه الزيارة بلا تاريخ محدد (على الأغلب لم يكن التاريخ واضحاً بالملف الأصلي وقت الاستيراد) — الرجاء تحديد التاريخ الصحيح أدناه</p>
     </div>
   </div>`:''}
-  <form id="visitEditForm">
+  <form id="visitEditForm" novalidate>
     <div class="section" style="margin-bottom:14px">
       <div class="section-body">
         <div class="field"><label>تاريخ الزيارة</label><input class="input" type="date" name="visitDate" value="${esc(v.date||'')}"></div>
@@ -2356,7 +2375,10 @@ function wireVisitDetail(id){
     const conductedBy=collectCheckedEmployeeNames(fd,'cond');
     /* قراءة التاريخ مباشرة من عنصر الإدخال كإجراء احترازي إضافي، بدل الاعتماد حصراً على FormData */
     const dateEl=e.target.querySelector('[name=visitDate]');
-    const visitDate=(dateEl?dateEl.value:fd.get('visitDate'))||'';
+    const visitDate=normalizeDateField(dateEl);
+    if(visitDate && !/^\d{4}-\d{2}-\d{2}$/.test(visitDate)){ toast('يرجى اختيار تاريخ صحيح للزيارة',true); dateEl?.focus(); return; }
+    const missingSite=sites.find(x=>!(x.projectName||'').trim()||!(x.location||'').trim());
+    if(missingSite){ toast('يرجى تعبئة اسم المشروع والموقع قبل الحفظ',true); return; }
     setLoading(btn,true);
     try{
       await updateDoc(doc(db,'visits',id),{date:visitDate, sites, conductedBy, updatedAt:serverTimestamp()});
@@ -3032,7 +3054,7 @@ function renderMeetingAdd(){
   return `
   <button class="btn btn-ghost btn-sm" data-go="portal-meetings" style="margin-bottom:10px">${icon('chev')} رجوع</button>
   <div class="section-title-row"><h2>إضافة اجتماع</h2></div>
-  <form id="meetingForm">
+  <form id="meetingForm" novalidate>
     <div class="section"><div class="section-body">
       <div class="field"><label>عنوان الاجتماع</label><input class="input" name="title" required></div>
       <div class="row3">
@@ -3064,11 +3086,14 @@ function wireMeetingAdd(){
     const fd=new FormData(e.target);
     const attendees=S.employees.filter(emp=>fd.has('att_'+emp.id)).map(emp=>emp.id);
     const dateEl=e.target.querySelector('[name=date]');
-    const dateVal=(dateEl?dateEl.value:fd.get('date'))||'';
+    const dateVal=normalizeDateField(dateEl);
+    const title=(fd.get('title')||'').trim();
+    if(!title){ toast('يرجى إدخال عنوان الاجتماع',true); e.target.querySelector('[name=title]')?.focus(); return; }
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(dateVal)){ toast('يرجى اختيار تاريخ صحيح للاجتماع',true); dateEl?.focus(); return; }
     setLoading(btn,true);
     try{
       await addDoc(collection(db,'meetings'),{
-        title:fd.get('title')||'', date:dateVal, startTime:fd.get('startTime')||'', endTime:fd.get('endTime')||'',
+        title:title, date:dateVal, startTime:fd.get('startTime')||'', endTime:fd.get('endTime')||'',
         location:fd.get('location')||'', attendees, extraAttendees:fd.get('extraAttendees')||'',
         agenda:fd.get('agenda')||'', notes:fd.get('notes')||'',
         createdBy:S.user.name, createdAt:serverTimestamp()
@@ -3095,7 +3120,7 @@ function renderMeetingDetail(id){
   </div>
   ${m.deleted?'<div class="delivery-note">هذا الاجتماع في سلة المحذوفات، ويمكن للمشرف استعادته منها.</div>':''}
   <div class="section" style="margin-bottom:20px"><div class="section-body">
-    <form id="meetingEditForm">
+    <form id="meetingEditForm" novalidate>
       <div class="field"><label>عنوان الاجتماع</label><input class="input" name="title" value="${esc(m.title||'')}" required></div>
       <div class="row3">
         <div class="field"><label>التاريخ</label><input class="input" type="date" name="date" value="${esc(m.date||'')}" required></div>
@@ -3162,8 +3187,10 @@ function wireMeetingDetail(id){
     const attendees=S.employees.filter(emp=>fd.has('att_'+emp.id)).map(emp=>emp.id);
     /* قراءة التاريخ مباشرة من عنصر الإدخال كإجراء احترازي إضافي، بدل الاعتماد حصراً على FormData */
     const dateEl=e.target.querySelector('[name=date]');
-    const newTitle=fd.get('title')||'';
-    const newDate=(dateEl?dateEl.value:fd.get('date'))||'';
+    const newTitle=(fd.get('title')||'').trim();
+    const newDate=normalizeDateField(dateEl);
+    if(!newTitle){ toast('يرجى إدخال عنوان الاجتماع',true); e.target.querySelector('[name=title]')?.focus(); return; }
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(newDate)){ toast('يرجى اختيار تاريخ صحيح للاجتماع',true); dateEl?.focus(); return; }
     const newStartTime=fd.get('startTime')||'', newEndTime=fd.get('endTime')||'';
     const newLocation=fd.get('location')||'', newExtra=fd.get('extraAttendees')||'', newAgenda=fd.get('agenda')||'', newNotes=fd.get('notes')||'';
     setLoading(btn,true);
