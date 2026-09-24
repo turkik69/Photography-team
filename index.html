@@ -528,6 +528,12 @@ html{scroll-behavior:smooth}body{background:var(--workspace-bg)}
 @media(max-width:1050px){.operational-grid{grid-template-columns:1fr}}
 @media(max-width:550px){.pipeline{grid-template-columns:repeat(2,minmax(0,1fr))}.operational-card-head{padding:13px}.operational-row{padding:12px}}
 
+
+/* Safe mobile action spacing */
+.safe-save-btn{position:relative;z-index:2}
+@media(max-width:900px){
+  .safe-save-btn{margin-bottom:calc(92px + env(safe-area-inset-bottom))!important}
+}
 </style>
 </head>
 <body>
@@ -2290,7 +2296,7 @@ function renderVisitDetail(id){
     </div>
     <div id="siteRowsWrap">${sites.map((s,i)=>siteRowHtml(i,s)).join('')}</div>
     <button type="button" class="btn btn-outline btn-block" id="addSiteBtn" style="margin-bottom:16px">${icon('plus')} إضافة موقع آخر في نفس الزيارة</button>
-    <button class="btn btn-primary btn-block" type="submit" style="padding:15px">${icon('check')} حفظ التعديلات</button>
+    <button class="btn btn-primary btn-block safe-save-btn" type="submit" style="padding:15px">${icon('check')} حفظ التعديلات</button>
   </form>
   `;
 }
@@ -3082,7 +3088,10 @@ function renderMeetingDetail(id){
   return `
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
     <button class="btn btn-ghost btn-sm" data-back-nav>${icon('chev')} رجوع</button>
-    ${S.user.role==='lead'&&!m.deleted?`<button type="button" class="btn btn-danger btn-sm" id="deleteMeetingBtn">${icon('trash')} حذف الاجتماع</button>`:''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${!m.deleted?`<button type="button" class="btn btn-outline btn-sm" id="editMeetingBtn">${icon('edit')} تعديل الاجتماع</button>`:''}
+      ${S.user.role==='lead'&&!m.deleted?`<button type="button" class="btn btn-danger btn-sm" id="deleteMeetingBtn">${icon('trash')} حذف الاجتماع</button>`:''}
+    </div>
   </div>
   ${m.deleted?'<div class="delivery-note">هذا الاجتماع في سلة المحذوفات، ويمكن للمشرف استعادته منها.</div>':''}
   <div class="section" style="margin-bottom:20px"><div class="section-body">
@@ -3103,7 +3112,7 @@ function renderMeetingDetail(id){
       <div class="field"><label>حضور إضافي (خارج الفريق)</label><input class="input" name="extraAttendees" value="${esc(m.extraAttendees||'')}" placeholder="أسماء مفصولة بفاصلة"></div>
       <div class="field"><label>جدول الأعمال / المواضيع</label><textarea class="input" name="agenda">${esc(m.agenda||'')}</textarea></div>
       <div class="field" style="margin-bottom:0"><label>ملاحظات / محضر الاجتماع</label><textarea class="input" name="notes" style="min-height:120px">${esc(m.notes||'')}</textarea></div>
-      <button class="btn btn-primary btn-block" type="submit" style="padding:15px;margin-top:16px">${icon('check')} حفظ تعديلات الاجتماع</button>
+      <button class="btn btn-primary btn-block safe-save-btn" id="saveMeetingBtn" type="submit" style="padding:15px;margin-top:16px">${icon('check')} حفظ تعديلات الاجتماع</button>
     </form>
   </div></div>`;
 }
@@ -3126,7 +3135,26 @@ function wireMeetingDetail(id){
     }catch(err){console.error(err);toast('تعذر حذف الاجتماع، تحقق من الصلاحيات',true);setLoading(deleteMeetingBtn,false,'<span>'+icon('trash')+' حذف الاجتماع</span>');}
   });
   const editForm=$('#meetingEditForm');
-  if(editForm&&S.meetings.find(m=>m.id===id)?.deleted) editForm.querySelectorAll('input,textarea,button,select').forEach(el=>el.disabled=true);
+  const editMeetingBtn=$('#editMeetingBtn');
+  if(editForm){
+    const deleted=S.meetings.find(m=>m.id===id)?.deleted;
+    const editableEls=editForm.querySelectorAll('input,textarea,select');
+    const saveBtn=$('#saveMeetingBtn');
+    if(deleted){
+      editableEls.forEach(el=>el.disabled=true);
+      if(saveBtn) saveBtn.disabled=true;
+    }else{
+      editableEls.forEach(el=>el.disabled=true);
+      if(saveBtn) saveBtn.style.display='none';
+      if(editMeetingBtn) editMeetingBtn.addEventListener('click',()=>{
+        editableEls.forEach(el=>el.disabled=false);
+        if(saveBtn) saveBtn.style.display='';
+        editMeetingBtn.style.display='none';
+        const first=editForm.querySelector('input[name=title]');
+        if(first) first.focus();
+      });
+    }
+  }
   if(editForm&&!S.meetings.find(m=>m.id===id)?.deleted) editForm.addEventListener('submit',async(e)=>{
     e.preventDefault();
     const btn=e.target.querySelector('[type=submit]');
@@ -3152,6 +3180,7 @@ function wireMeetingDetail(id){
       }
       toast('تم حفظ تعديلات الاجتماع');
       setLoading(btn,false,'<span>'+icon('check')+' حفظ تعديلات الاجتماع</span>');
+      go('portal-meetings');
     }catch(err){ console.error(err); setLoading(btn,false,'<span>'+icon('check')+' حفظ تعديلات الاجتماع</span>'); toast('تعذر الحفظ',true); }
   });
 }
