@@ -1650,7 +1650,7 @@ function meetingListItemHtml(m){
     <div class="list-item-icon">${icon('users')}</div>
     <div class="list-item-body">
       <div class="list-item-title">${esc(m.title||'اجتماع')}</div>
-      <div class="list-item-sub"><span>${fmtDateShort(m.date)}</span>${m.startTime?`<span>· ${esc(m.startTime)}</span>`:''}${m.location?`<span>· ${esc(m.location)}</span>`:''}</div>
+      <div class="list-item-sub"><span>${fmtDateShort(m.date)}</span>${(m.startTime||m.endTime)?`<span>· ${esc(m.startTime||'—')}${m.endTime?' - '+esc(m.endTime):''}</span>`:''}${m.location?`<span>· ${esc(m.location)}</span>`:''}</div>
     </div>
     <div class="list-item-chev">${icon('chev')}</div>
   </div>`;
@@ -2085,6 +2085,7 @@ function visitsListInnerHtml(list){
         ${v.certified===false?`<span class="badge badge-urgent">بانتظار الاعتماد</span>`:''}
       </div>
       <div class="grid-card-title">${v.date?fmtDate(v.date):'بدون تاريخ'}</div>
+      ${(v.startTime||v.endTime)?`<div class="grid-card-sub" style="font-weight:700">${icon('clock')} ${esc(v.startTime||'—')} ${v.endTime?' - '+esc(v.endTime):''}</div>`:''}
       <div class="grid-card-sub">${esc(typesPreview||(sites[0]&&sites[0].projectName)||'')}</div>
       ${(v.conductedBy&&v.conductedBy.length)?`<div class="grid-card-sub" style="margin-top:3px">${esc(v.conductedBy.join('، '))}</div>`:''}
     </div>`;
@@ -2150,7 +2151,11 @@ function renderVisitAdd(){
   <form id="visitForm" novalidate>
     <div class="section" style="margin-bottom:14px">
       <div class="section-body">
-        <div class="field"><label>تاريخ الزيارة</label><input class="input" type="date" name="visitDate" value="${todayISO()}" required></div>
+        <div class="row3">
+          <div class="field"><label>تاريخ الزيارة</label><input class="input" type="date" name="visitDate" value="${todayISO()}" required></div>
+          <div class="field"><label>وقت بداية الزيارة</label><input class="input" type="time" name="visitStartTime" value="${nowTimeHM()}"></div>
+          <div class="field"><label>وقت انتهاء الزيارة</label><input class="input" type="time" name="visitEndTime"></div>
+        </div>
         <div class="field" style="margin-bottom:0">
           <label>من قام بالزيارة</label>
           <div class="check-grid">${employeeCheckGridHtml('cond')}</div>
@@ -2215,6 +2220,9 @@ function wireVisitAdd(){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(visitDate)){ toast('يرجى اختيار تاريخ صحيح للزيارة',true); visitDateEl?.focus(); return; }
     const missingSite=sites.find(x=>!(x.projectName||'').trim()||!(x.location||'').trim());
     if(missingSite){ toast('يرجى تعبئة اسم المشروع والموقع قبل الحفظ',true); return; }
+    const visitStartTime=fd.get('visitStartTime')||'';
+    const visitEndTime=fd.get('visitEndTime')||'';
+    if(visitStartTime&&visitEndTime&&visitEndTime<visitStartTime){ toast('وقت انتهاء الزيارة يجب أن يكون بعد وقت البداية',true); return; }
     const assignTo=fd.get('assignTo')||'';
     const assignedEmp=assignTo?S.employees.find(x=>x.id===assignTo):null;
     /* المهمة المسندة تُحتسب من ضمن أعمال الموظف المكلّف بها، وليست ضمن أعمال المشرف المُسنِد،
@@ -2223,10 +2231,10 @@ function wireVisitAdd(){
     setLoading(btn,true);
     try{
       const newVisitRef=await addDoc(collection(db,'visits'),{
-        date:visitDate, sites, conductedBy, certified:S.user.role==='lead', createdBy:S.user.name, createdAt:serverTimestamp()
+        date:visitDate, startTime:visitStartTime, endTime:visitEndTime, sites, conductedBy, certified:S.user.role==='lead', createdBy:S.user.name, createdAt:serverTimestamp()
       });
       if(assignedEmp){
-        await createNotification(assignTo, `تم إسناد مهمة زيارة لك بتاريخ ${fmtDateShort(visitDate)}، يجب الاطلاع عليها من خلال المنصة`, 'portal-visit-detail', newVisitRef.id);
+        await createNotification(assignTo, `تم إسناد مهمة زيارة لك بتاريخ ${fmtDateShort(visitDate)}${visitStartTime?' الساعة '+visitStartTime:''}، يجب الاطلاع عليها من خلال المنصة`, 'portal-visit-detail', newVisitRef.id);
         S.filters.visitsMonth=monthKey(visitDate);
         showAssignmentSentOverlay(assignedEmp, visitDate, sites);
         return;
@@ -2306,7 +2314,11 @@ function renderVisitDetail(id){
   <form id="visitEditForm" novalidate>
     <div class="section" style="margin-bottom:14px">
       <div class="section-body">
-        <div class="field"><label>تاريخ الزيارة</label><input class="input" type="date" name="visitDate" value="${esc(v.date||'')}"></div>
+        <div class="row3">
+          <div class="field"><label>تاريخ الزيارة</label><input class="input" type="date" name="visitDate" value="${esc(v.date||'')}"></div>
+          <div class="field"><label>وقت بداية الزيارة</label><input class="input" type="time" name="visitStartTime" value="${esc(v.startTime||'')}"></div>
+          <div class="field"><label>وقت انتهاء الزيارة</label><input class="input" type="time" name="visitEndTime" value="${esc(v.endTime||'')}"></div>
+        </div>
         <div class="field" style="margin-bottom:0">
           <label>من قام بالزيارة</label>
           <div class="check-grid">${employeeCheckGridHtml('cond', v.conductedBy)}</div>
@@ -2379,11 +2391,14 @@ function wireVisitDetail(id){
     if(visitDate && !/^\d{4}-\d{2}-\d{2}$/.test(visitDate)){ toast('يرجى اختيار تاريخ صحيح للزيارة',true); dateEl?.focus(); return; }
     const missingSite=sites.find(x=>!(x.projectName||'').trim()||!(x.location||'').trim());
     if(missingSite){ toast('يرجى تعبئة اسم المشروع والموقع قبل الحفظ',true); return; }
+    const visitStartTime=fd.get('visitStartTime')||'';
+    const visitEndTime=fd.get('visitEndTime')||'';
+    if(visitStartTime&&visitEndTime&&visitEndTime<visitStartTime){ toast('وقت انتهاء الزيارة يجب أن يكون بعد وقت البداية',true); return; }
     setLoading(btn,true);
     try{
-      await updateDoc(doc(db,'visits',id),{date:visitDate, sites, conductedBy, updatedAt:serverTimestamp()});
+      await updateDoc(doc(db,'visits',id),{date:visitDate, startTime:visitStartTime, endTime:visitEndTime, sites, conductedBy, updatedAt:serverTimestamp()});
       const localVisit=S.visits.find(x=>x.id===id);
-      if(localVisit){ localVisit.date=visitDate; localVisit.sites=sites; localVisit.conductedBy=conductedBy; }
+      if(localVisit){ localVisit.date=visitDate; localVisit.startTime=visitStartTime; localVisit.endTime=visitEndTime; localVisit.sites=sites; localVisit.conductedBy=conductedBy; }
       toast('تم حفظ التعديلات بنجاح');
       if(visitDate) S.filters.visitsMonth=monthKey(visitDate);
       go('portal-visits');
@@ -3085,6 +3100,8 @@ function wireMeetingAdd(){
     const btn=e.target.querySelector('[type=submit]');
     const fd=new FormData(e.target);
     const attendees=S.employees.filter(emp=>fd.has('att_'+emp.id)).map(emp=>emp.id);
+    const startTime=fd.get('startTime')||'', endTime=fd.get('endTime')||'';
+    if(startTime&&endTime&&endTime<startTime){ toast('وقت انتهاء الاجتماع يجب أن يكون بعد وقت البداية',true); return; }
     const dateEl=e.target.querySelector('[name=date]');
     const dateVal=normalizeDateField(dateEl);
     const title=(fd.get('title')||'').trim();
@@ -3093,7 +3110,7 @@ function wireMeetingAdd(){
     setLoading(btn,true);
     try{
       await addDoc(collection(db,'meetings'),{
-        title:title, date:dateVal, startTime:fd.get('startTime')||'', endTime:fd.get('endTime')||'',
+        title:title, date:dateVal, startTime, endTime,
         location:fd.get('location')||'', attendees, extraAttendees:fd.get('extraAttendees')||'',
         agenda:fd.get('agenda')||'', notes:fd.get('notes')||'',
         createdBy:S.user.name, createdAt:serverTimestamp()
@@ -3192,6 +3209,7 @@ function wireMeetingDetail(id){
     if(!newTitle){ toast('يرجى إدخال عنوان الاجتماع',true); e.target.querySelector('[name=title]')?.focus(); return; }
     if(!/^\d{4}-\d{2}-\d{2}$/.test(newDate)){ toast('يرجى اختيار تاريخ صحيح للاجتماع',true); dateEl?.focus(); return; }
     const newStartTime=fd.get('startTime')||'', newEndTime=fd.get('endTime')||'';
+    if(newStartTime&&newEndTime&&newEndTime<newStartTime){ toast('وقت انتهاء الاجتماع يجب أن يكون بعد وقت البداية',true); return; }
     const newLocation=fd.get('location')||'', newExtra=fd.get('extraAttendees')||'', newAgenda=fd.get('agenda')||'', newNotes=fd.get('notes')||'';
     setLoading(btn,true);
     try{
@@ -3599,7 +3617,7 @@ function employeeDetailReportHtml(emp, period){
           <div class="list-item-icon">${icon('pin')}</div>
           <div class="list-item-body">
             <div class="list-item-title">${v.date?fmtDate(v.date):'بدون تاريخ'}</div>
-            <div class="list-item-sub">${(v.sites||[]).map(s=>esc(s.projectName)).join('، ')}</div>
+            <div class="list-item-sub">${(v.startTime||v.endTime)?esc(v.startTime||'—')+(v.endTime?' - '+esc(v.endTime):'')+' · ':''}${(v.sites||[]).map(s=>esc(s.projectName)).join('، ')}</div>
           </div>
           <div class="list-item-chev">${icon('chev')}</div>
         </div>`).join('')}
@@ -3612,7 +3630,7 @@ function employeeDetailReportHtml(emp, period){
       ${d.meetingsAttended.map(m=>`
         <div class="list-item" data-report-meeting="${m.id}">
           <div class="list-item-icon">${icon('users')}</div>
-          <div class="list-item-body"><div class="list-item-title">${esc(m.title)}</div><div class="list-item-sub">${fmtDateShort(m.date)}</div></div>
+          <div class="list-item-body"><div class="list-item-title">${esc(m.title)}</div><div class="list-item-sub">${fmtDateShort(m.date)}${(m.startTime||m.endTime)?' · '+esc(m.startTime||'—')+(m.endTime?' - '+esc(m.endTime):''):''}</div></div>
           <div class="list-item-chev">${icon('chev')}</div>
         </div>`).join('')}
     </div>
@@ -3702,13 +3720,16 @@ function detailedSubjectReportHtml(){
     if(item.kind==='visit'){
       return `<div class="section" style="margin-bottom:12px"><div class="section-head">${icon('pin')} ${esc(item.title)}</div><div class="section-body">
         <div class="kv"><span class="k">التاريخ</span><span class="v">${esc(item.date||'—')}</span></div>
+        <div class="kv"><span class="k">وقت الزيارة</span><span class="v">${esc(x.startTime||'—')}${x.endTime?' - '+esc(x.endTime):''}</span></div>
         <div class="kv"><span class="k">من قام بالزيارة</span><span class="v">${esc((x.conductedBy||[]).join('، ')||'—')}</span></div>
         ${(x.sites||[]).map(site=>`<div class="delivery-note"><strong>${esc(site.projectName||'موقع')}</strong> — ${esc(site.taskType||'')}<br>${esc(site.location||'')}${site.description?'<br>'+esc(site.description):''}</div>`).join('')}
       </div></div>`;
     }
     if(item.kind==='meeting'){
       return `<div class="section" style="margin-bottom:12px"><div class="section-head">${icon('users')} ${esc(item.title)}</div><div class="section-body">
-        <div class="kv"><span class="k">التاريخ والوقت</span><span class="v">${esc(item.date||'—')} ${esc([x.startTime,x.endTime].filter(Boolean).join(' - '))}</span></div>
+        <div class="kv"><span class="k">التاريخ</span><span class="v">${esc(item.date||'—')}</span></div>
+        <div class="kv"><span class="k">وقت بداية الاجتماع</span><span class="v">${esc(x.startTime||'—')}</span></div>
+        <div class="kv"><span class="k">وقت انتهاء الاجتماع</span><span class="v">${esc(x.endTime||'—')}</span></div>
         <div class="kv"><span class="k">المكان</span><span class="v">${esc(x.location||'—')}</span></div>
         ${x.agenda?`<div class="kv"><span class="k">الموضوع / جدول الأعمال</span><span class="v">${esc(x.agenda)}</span></div>`:''}
         ${x.notes?`<div class="kv"><span class="k">النتائج / المحضر</span><span class="v">${esc(x.notes)}</span></div>`:''}
@@ -3916,10 +3937,10 @@ function appendSubjectSheetToWorkbook(XLSX,wb){
       if(x.production?.notes) rows.push(['ملاحظات الإنتاج',x.production.notes]);
       if(x.production?.deliveryDate) rows.push(['التسليم',x.production.deliveryDate,x.production.recipient||'']);
     }else if(item.kind==='visit'){
-      rows.push(['من قام بالزيارة',(x.conductedBy||[]).join('، ')]);
+      rows.push(['وقت بداية الزيارة',x.startTime||''],['وقت انتهاء الزيارة',x.endTime||''],['من قام بالزيارة',(x.conductedBy||[]).join('، ')]);
       (x.sites||[]).forEach(site=>rows.push(['الموقع / المشروع',site.projectName||'',site.taskType||'',site.location||'',site.description||'']));
     }else if(item.kind==='meeting'){
-      rows.push(['الوقت',[x.startTime,x.endTime].filter(Boolean).join(' - ')],['المكان',x.location||''],['جدول الأعمال',x.agenda||''],['الملاحظات',x.notes||'']);
+      rows.push(['وقت البداية',x.startTime||''],['وقت الانتهاء',x.endTime||''],['المكان',x.location||''],['جدول الأعمال',x.agenda||''],['الملاحظات',x.notes||'']);
     }else{
       rows.push(['الحالة',taskStatusLabel(x.status)],['الفترة',[x.startDate,x.endDate].filter(Boolean).join(' - ')],['المسؤول',(x.responsible||[]).join('، ')],['الملاحظات',x.notes||'']);
     }
@@ -3968,14 +3989,14 @@ async function exportReportToExcel(){
         }
         if(d.visitsConducted.length){
           rows.push(['الزيارات']);
-          rows.push(['التاريخ','المواقع']);
-          d.visitsConducted.forEach(v=>rows.push([v.date?fmtDate(v.date):'بدون تاريخ', (v.sites||[]).map(s=>s.projectName).join('، ')]));
+          rows.push(['التاريخ','وقت البداية','وقت الانتهاء','المواقع']);
+          d.visitsConducted.forEach(v=>rows.push([v.date?fmtDate(v.date):'بدون تاريخ', v.startTime||'', v.endTime||'', (v.sites||[]).map(s=>s.projectName).join('، ')]));
           rows.push([]);
         }
         if(d.meetingsAttended.length){
           rows.push(['الاجتماعات']);
-          rows.push(['العنوان','التاريخ']);
-          d.meetingsAttended.forEach(m=>rows.push([m.title||'', fmtDateShort(m.date)]));
+          rows.push(['العنوان','التاريخ','وقت البداية','وقت الانتهاء']);
+          d.meetingsAttended.forEach(m=>rows.push([m.title||'', fmtDateShort(m.date), m.startTime||'', m.endTime||'']));
           rows.push([]);
         }
         if(d.tasksResponsible.length){
