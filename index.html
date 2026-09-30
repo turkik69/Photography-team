@@ -2087,6 +2087,7 @@ function visitsListInnerHtml(list){
       <div class="grid-card-title">${v.date?fmtDate(v.date):'بدون تاريخ'}</div>
       ${(v.startTime||v.endTime)?`<div class="grid-card-sub" style="font-weight:700">${icon('clock')} ${esc(v.startTime||'—')} ${v.endTime?' - '+esc(v.endTime):''}</div>`:''}
       <div class="grid-card-sub">${esc(typesPreview||(sites[0]&&sites[0].projectName)||'')}</div>
+      ${sites.some(site=>site.startTime||site.endTime)?`<div class="grid-card-sub" style="margin-top:4px">${sites.slice(0,2).map((site,i)=>`م${i+1}: ${esc(site.startTime||'—')}${site.endTime?' - '+esc(site.endTime):''}`).join(' · ')}${sites.length>2?' · +'+(sites.length-2):''}</div>`:''}
       ${(v.conductedBy&&v.conductedBy.length)?`<div class="grid-card-sub" style="margin-top:3px">${esc(v.conductedBy.join('، '))}</div>`:''}
     </div>`;
   }).join('')}</div>`;
@@ -2140,6 +2141,10 @@ function siteRowHtml(idx, data){
     <div class="row2">
       <div class="field"><label>اسم المشروع / الموقع</label><input class="input" name="projectName_${idx}" value="${esc(data.projectName||'')}" required></div>
       <div class="field"><label>الموقع (الولاية)</label><input class="input" name="location_${idx}" value="${esc(data.location||'')}" required></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>وقت بداية زيارة الموقع</label><input class="input" type="time" name="siteStartTime_${idx}" value="${esc(data.startTime||'')}"></div>
+      <div class="field"><label>وقت انتهاء زيارة الموقع</label><input class="input" type="time" name="siteEndTime_${idx}" value="${esc(data.endTime||'')}"></div>
     </div>
     <div class="field" style="margin-bottom:0"><label>الوصف / الملاحظات</label><textarea class="input" name="description_${idx}">${esc(data.description||'')}</textarea></div>
   </div>`;
@@ -2211,6 +2216,8 @@ function wireVisitAdd(){
         taskType,
         projectName:fd.get('projectName_'+idx)||'',
         location:fd.get('location_'+idx)||'',
+        startTime:fd.get('siteStartTime_'+idx)||'',
+        endTime:fd.get('siteEndTime_'+idx)||'',
         description:fd.get('description_'+idx)||''
       };
     });
@@ -2220,6 +2227,8 @@ function wireVisitAdd(){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(visitDate)){ toast('يرجى اختيار تاريخ صحيح للزيارة',true); visitDateEl?.focus(); return; }
     const missingSite=sites.find(x=>!(x.projectName||'').trim()||!(x.location||'').trim());
     if(missingSite){ toast('يرجى تعبئة اسم المشروع والموقع قبل الحفظ',true); return; }
+    const invalidSiteTime=sites.find(x=>x.startTime&&x.endTime&&x.endTime<x.startTime);
+    if(invalidSiteTime){ toast('وقت انتهاء زيارة أحد المواقع يجب أن يكون بعد وقت البداية',true); return; }
     const visitStartTime=fd.get('visitStartTime')||'';
     const visitEndTime=fd.get('visitEndTime')||'';
     if(visitStartTime&&visitEndTime&&visitEndTime<visitStartTime){ toast('وقت انتهاء الزيارة يجب أن يكون بعد وقت البداية',true); return; }
@@ -2251,7 +2260,7 @@ function wireVisitAdd(){
 }
 function buildAssignmentMailto(emp, visitDate, sites){
   const to=`${emp.employeeNumber}@mm.gov.om`;
-  const sitesText=(sites||[]).map(s=>`- ${s.projectName||''} (${s.taskType||''}) — ${s.location||''}`).join(String.fromCharCode(10));
+  const sitesText=(sites||[]).map(s=>`- ${s.projectName||''} (${s.taskType||''}) — ${s.location||''}${(s.startTime||s.endTime)?' | '+(s.startTime||'—')+(s.endTime?' - '+s.endTime:''):''}`).join(String.fromCharCode(10));
   const subject='تم إسناد مهمة لك - منصة فريق التصوير';
   const body=`عزيزي/عزيزتي ${emp.name}،
 
@@ -2381,6 +2390,8 @@ function wireVisitDetail(id){
         taskType,
         projectName:fd.get('projectName_'+idx)||'',
         location:fd.get('location_'+idx)||'',
+        startTime:fd.get('siteStartTime_'+idx)||'',
+        endTime:fd.get('siteEndTime_'+idx)||'',
         description:fd.get('description_'+idx)||''
       };
     });
@@ -2391,6 +2402,8 @@ function wireVisitDetail(id){
     if(visitDate && !/^\d{4}-\d{2}-\d{2}$/.test(visitDate)){ toast('يرجى اختيار تاريخ صحيح للزيارة',true); dateEl?.focus(); return; }
     const missingSite=sites.find(x=>!(x.projectName||'').trim()||!(x.location||'').trim());
     if(missingSite){ toast('يرجى تعبئة اسم المشروع والموقع قبل الحفظ',true); return; }
+    const invalidSiteTime=sites.find(x=>x.startTime&&x.endTime&&x.endTime<x.startTime);
+    if(invalidSiteTime){ toast('وقت انتهاء زيارة أحد المواقع يجب أن يكون بعد وقت البداية',true); return; }
     const visitStartTime=fd.get('visitStartTime')||'';
     const visitEndTime=fd.get('visitEndTime')||'';
     if(visitStartTime&&visitEndTime&&visitEndTime<visitStartTime){ toast('وقت انتهاء الزيارة يجب أن يكون بعد وقت البداية',true); return; }
@@ -3722,7 +3735,7 @@ function detailedSubjectReportHtml(){
         <div class="kv"><span class="k">التاريخ</span><span class="v">${esc(item.date||'—')}</span></div>
         <div class="kv"><span class="k">وقت الزيارة</span><span class="v">${esc(x.startTime||'—')}${x.endTime?' - '+esc(x.endTime):''}</span></div>
         <div class="kv"><span class="k">من قام بالزيارة</span><span class="v">${esc((x.conductedBy||[]).join('، ')||'—')}</span></div>
-        ${(x.sites||[]).map(site=>`<div class="delivery-note"><strong>${esc(site.projectName||'موقع')}</strong> — ${esc(site.taskType||'')}<br>${esc(site.location||'')}${site.description?'<br>'+esc(site.description):''}</div>`).join('')}
+        ${(x.sites||[]).map(site=>`<div class="delivery-note"><strong>${esc(site.projectName||'موقع')}</strong> — ${esc(site.taskType||'')}<br>${esc(site.location||'')}${(site.startTime||site.endTime)?'<br><strong>التوقيت:</strong> '+esc(site.startTime||'—')+(site.endTime?' - '+esc(site.endTime):''):''}${site.description?'<br>'+esc(site.description):''}</div>`).join('')}
       </div></div>`;
     }
     if(item.kind==='meeting'){
@@ -3938,7 +3951,7 @@ function appendSubjectSheetToWorkbook(XLSX,wb){
       if(x.production?.deliveryDate) rows.push(['التسليم',x.production.deliveryDate,x.production.recipient||'']);
     }else if(item.kind==='visit'){
       rows.push(['وقت بداية الزيارة',x.startTime||''],['وقت انتهاء الزيارة',x.endTime||''],['من قام بالزيارة',(x.conductedBy||[]).join('، ')]);
-      (x.sites||[]).forEach(site=>rows.push(['الموقع / المشروع',site.projectName||'',site.taskType||'',site.location||'',site.description||'']));
+      (x.sites||[]).forEach(site=>rows.push(['الموقع / المشروع',site.projectName||'',site.taskType||'',site.location||'',site.startTime||'',site.endTime||'',site.description||'']));
     }else if(item.kind==='meeting'){
       rows.push(['وقت البداية',x.startTime||''],['وقت الانتهاء',x.endTime||''],['المكان',x.location||''],['جدول الأعمال',x.agenda||''],['الملاحظات',x.notes||'']);
     }else{
@@ -3990,7 +4003,7 @@ async function exportReportToExcel(){
         if(d.visitsConducted.length){
           rows.push(['الزيارات']);
           rows.push(['التاريخ','وقت البداية','وقت الانتهاء','المواقع']);
-          d.visitsConducted.forEach(v=>rows.push([v.date?fmtDate(v.date):'بدون تاريخ', v.startTime||'', v.endTime||'', (v.sites||[]).map(s=>s.projectName).join('، ')]));
+          d.visitsConducted.forEach(v=>rows.push([v.date?fmtDate(v.date):'بدون تاريخ', v.startTime||'', v.endTime||'', (v.sites||[]).map(s=>s.projectName+(s.startTime||s.endTime?' ('+(s.startTime||'—')+(s.endTime?' - '+s.endTime:'')+')':'')).join('، ')]));
           rows.push([]);
         }
         if(d.meetingsAttended.length){
