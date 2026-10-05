@@ -1,212 +1,36 @@
-name: One-time structured reports redesign
+name: Apply structured reports redesign
 on:
-  push:
-    paths:
-      - '.github/workflows/report-redesign-once.yml'
+  pull_request:
+    branches: [ main ]
 permissions:
   contents: write
 jobs:
   patch:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
       - name: Patch report UI and exports
-        shell: python
+        run: python tools/patch_reports.py
+      - name: Validate JavaScript syntax approximately
         run: |
+          python - <<'PY'
           from pathlib import Path
-          import re
-          p=Path('index.html')
-          s=p.read_text(encoding='utf-8')
-
-          css = r'''
-/* Structured reports — clear table-first layout */
-.report-selector{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
-.report-selector .chip{min-width:105px;justify-content:center}
-.report-sheet{background:#fff;border:1px solid #dfe8e3;border-radius:16px;overflow:hidden;margin-bottom:18px;box-shadow:0 4px 18px #1649360a}
-.report-sheet-head{padding:15px 18px;background:#edf5f0;border-bottom:1px solid #dce8e1;display:flex;justify-content:space-between;align-items:center;gap:12px}
-.report-sheet-head h3{margin:0;color:#174a3b;font-size:15px;font-weight:900}
-.report-sheet-head span{font-size:11px;color:#5f786d}
-.report-table-wrap{overflow:auto;width:100%}
-.report-table{width:100%;border-collapse:collapse;min-width:850px;font-size:12px;background:#fff}
-.report-table th{background:#2f6f24;color:#fff;font-weight:800;padding:10px 9px;border:1px solid #d8e1d9;white-space:nowrap;text-align:right}
-.report-table td{padding:9px 9px;border:1px solid #e1e7e3;vertical-align:top;line-height:1.65;color:#304a41}
-.report-table tbody tr:nth-child(even){background:#f7faf8}
-.report-table tbody tr:hover{background:#eef7f1}
-.report-table .num-cell{width:44px;text-align:center;font-weight:800;color:#315f45}
-.report-table .status-done{background:#e8f5ec;color:#23724b;font-weight:800}
-.report-table .status-progress{background:#fff4d8;color:#976a12;font-weight:800}
-.report-table .status-alert{background:#fdeaea;color:#a23d36;font-weight:800}
-.report-summary-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 16px}
-.report-summary-item{background:#fff;border:1px solid #e0e8e3;border-radius:12px;padding:13px 14px}
-.report-summary-item strong{display:block;font-size:22px;color:#205743}.report-summary-item span{font-size:11px;color:#677e74}
-@media(max-width:900px){.report-summary-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.report-table{min-width:760px}}
-@media print{.report-sheet{box-shadow:none;border-color:#bbb}.report-table th{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#2f6f24!important;color:#fff!important}.report-table td{font-size:10px;padding:6px}.report-table{min-width:0}}
-'''
-          if '/* Structured reports — clear table-first layout */' not in s:
-              s=s.replace('</style>', css+'\n</style>',1)
-
-          helpers = r'''
-function selectedReportContentType(){ return S.filters.reportContentType||'all'; }
-function reportPeriodData(){
-  const p=reportPeriodBounds(S.filters.reportType,S.filters.reportValue);
-  return {
-    period:p,
-    requests:S.requests.filter(r=>!r.deleted&&r.event&&r.event.date&&r.event.date>=p.start&&r.event.date<=p.end),
-    visits:S.visits.filter(v=>v.certified!==false&&v.date&&v.date>=p.start&&v.date<=p.end),
-    meetings:S.meetings.filter(m=>!m.deleted&&m.date&&m.date>=p.start&&m.date<=p.end),
-    tasks:S.tasks.filter(t=>!t.deleted&&t.startDate&&t.startDate>=p.start&&t.startDate<=p.end)
-  };
-}
-function reportStatusClass(label){
-  const x=String(label||'');
-  if(x.includes('انتهاء')||x.includes('مكتمل')||x.includes('تم التسليم')) return 'status-done';
-  if(x.includes('جاري')||x.includes('إسناد')||x.includes('مستلم')) return 'status-progress';
-  if(x.includes('عاجل')||x.includes('متأخر')) return 'status-alert';
-  return '';
-}
-function reportSheetHtml(title,subtitle,headers,rows){
-  return `<section class="report-sheet"><div class="report-sheet-head"><h3>${esc(title)}</h3><span>${esc(subtitle||'')}</span></div>
-  <div class="report-table-wrap"><table class="report-table"><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead>
-  <tbody>${rows.length?rows.map(row=>`<tr>${row.map((c,i)=>`<td class="${i===0?'num-cell ':''}${c&&c.statusClass?c.statusClass:''}">${c&&typeof c==='object'?esc(c.text||''):esc(c==null?'':String(c))}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${headers.length}" style="text-align:center;padding:24px;color:#71877d">لا توجد بيانات خلال الفترة المحددة</td></tr>`}</tbody></table></div></section>`;
-}
-function tasksStructuredReport(data){
-  const rows=data.tasks.slice().sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||'')).map((t,i)=>[
-    i+1,t.title||'',t.startDate||'',t.endDate||'',(t.responsible||[]).join('، '),
-    {text:taskStatusLabel(t.status),statusClass:reportStatusClass(taskStatusLabel(t.status))},t.notes||''
-  ]);
-  return reportSheetHtml('جدول الأعمال',data.period.label,['م','الموضوع / المشروع','تاريخ البدء','تاريخ الانتهاء','المسؤول','الحالة','التحديات / الملاحظات'],rows);
-}
-function visitsStructuredReport(data){
-  const rows=[]; let n=1;
-  data.visits.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).forEach(v=>{
-    const sites=(v.sites&&v.sites.length)?v.sites:[{}];
-    sites.forEach(site=>rows.push([
-      n++,v.date||'',site.projectName||'',site.location||'',site.taskType||'',site.startTime||v.startTime||'',site.endTime||v.endTime||'',(v.conductedBy||[]).join('، '),site.description||''
-    ]));
-  });
-  return reportSheetHtml('جدول الزيارات',data.period.label,['م','تاريخ الزيارة','اسم المشروع / الموقع','الموقع','نوع المهمة','وقت البداية','وقت الانتهاء','من قام بالزيارة','الوصف / الملاحظات'],rows);
-}
-function requestsStructuredReport(data){
-  const rows=data.requests.slice().sort((a,b)=>(a.event?.date||'').localeCompare(b.event?.date||'')).map((r,i)=>[
-    i+1,r.requestNumber||'',r.event?.name||'',r.event?.date||'',r.requester?.directorate||'',r.event?.location||'',
-    {text:statusLabel(r.status),statusClass:reportStatusClass(statusLabel(r.status))},priorityLabel(r.priority),
-    empNamesFromIds(r.internal?.assignedPhotographers).join('، '),empNamesFromIds(r.internal?.assignedEditors).join('، '),r.internal?.teamNotes||r.production?.notes||''
-  ]);
-  return reportSheetHtml('طلبات التصوير',data.period.label,['م','رقم الطلب','الموضوع','التاريخ','الجهة','الموقع','الحالة','الأولوية','التصوير','المونتاج','الملاحظات'],rows);
-}
-function meetingsStructuredReport(data){
-  const rows=data.meetings.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map((m,i)=>[
-    i+1,m.title||'',m.date||'',m.startTime||'',m.endTime||'',m.location||'',
-    empNamesFromIds(m.attendees).join('، '),m.agenda||'',m.notes||''
-  ]);
-  return reportSheetHtml('الاجتماعات',data.period.label,['م','عنوان الاجتماع','التاريخ','وقت البداية','وقت الانتهاء','المكان','الحضور','جدول الأعمال','الملاحظات / المحضر'],rows);
-}
-function performanceStructuredReport(data){
-  const stats=computeReportStats(data.period.start,data.period.end);
-  const rows=stats.perEmp.map((r,i)=>[i+1,r.emp.name,r.asPhotog,r.asEditor,r.visitsLogged,r.meetingsAttended,r.total]);
-  return reportSheetHtml('أداء الموظفين',data.period.label,['م','الموظف','طلبات تصوير','مونتاج','زيارات','اجتماعات','الإجمالي'],rows);
-}
-'''
-          marker='function reportBodyHtml(){'
-          if 'function selectedReportContentType()' not in s:
-              s=s.replace(marker,helpers+'\n'+marker,1)
-
-          new_body = r'''function reportBodyHtml(){
-  const data=reportPeriodData();
-  if(S.filters.reportSelectedEmpId){
-    const emp=S.employees.find(e=>e.id===S.filters.reportSelectedEmpId);
-    if(emp) return employeeDetailReportHtml(emp,data.period);
-  }
-  const selected=selectedReportContentType();
-  const stats=computeReportStats(data.period.start,data.period.end);
-  let sections='';
-  if(selected==='all'||selected==='tasks') sections+=tasksStructuredReport(data);
-  if(selected==='all'||selected==='visits') sections+=visitsStructuredReport(data);
-  if(selected==='all'||selected==='requests') sections+=requestsStructuredReport(data);
-  if(selected==='all'||selected==='meetings') sections+=meetingsStructuredReport(data);
-  if(selected==='all'||selected==='performance') sections+=performanceStructuredReport(data);
-  return `<div class="print-header"><img src="data:image/png;base64,${LOGO_B64}" alt=""><div><h2>تقرير فريق التصوير — ${esc(data.period.label)}</h2><p>دائرة الفعاليات والتوعية - بلدية مسقط</p></div></div>
-  <div class="report-summary-strip">
-    <div class="report-summary-item"><strong>${stats.reqTotal}</strong><span>طلبات تصوير</span></div>
-    <div class="report-summary-item"><strong>${stats.visitDays}</strong><span>أيام زيارات</span></div>
-    <div class="report-summary-item"><strong>${data.tasks.length}</strong><span>بنود جدول الأعمال</span></div>
-    <div class="report-summary-item"><strong>${stats.meetingsTotal}</strong><span>اجتماعات</span></div>
-  </div>${sections}${detailedSubjectReportHtml()}`;
-}
-'''
-          s,n=re.subn(r'function reportBodyHtml\(\)\{.*?\n\}\nfunction renderReports\(\)\{',new_body+'function renderReports(){',s,flags=re.S)
-          if n!=1: raise SystemExit(f'reportBody replacement count {n}')
-
-          new_render = r'''function renderReports(){
-  if(S.user.role!=='lead') return `<div class="empty-state">${icon('alert')}<h3>هذه الصفحة مخصصة للمشرف فقط</h3></div>`;
-  if(!S.filters.reportType) S.filters.reportType='month';
-  if(!S.filters.reportValue) S.filters.reportValue=todayISO().slice(0,7);
-  if(!S.filters.reportContentType) S.filters.reportContentType='all';
-  const types=[['all','الكل'],['tasks','جدول الأعمال'],['visits','الزيارات'],['requests','طلبات التصوير'],['meetings','الاجتماعات'],['performance','أداء الموظفين']];
-  return `<div class="section-title-row no-print"><div><h2>التقارير والأداء</h2><p class="muted" style="margin-top:4px">اختر نوع التقرير والفترة ثم استخرجه بصيغة PDF أو Excel</p></div>
-    <div style="display:flex;gap:8px"><button class="btn btn-outline btn-sm" id="exportExcelBtn">${icon('doc')} Excel</button><button class="btn btn-outline btn-sm" id="printReportBtn">${icon('doc')} PDF</button></div></div>
-  <div class="section no-print" style="margin-bottom:14px"><div class="section-body">
-    <div class="field"><label>نوع التقرير المطلوب</label><div class="report-selector">${types.map(([k,l])=>`<button type="button" class="chip ${S.filters.reportContentType===k?'on':''}" data-report-content="${k}">${l}</button>`).join('')}</div></div>
-    <div class="chiprow" id="reportTypeChiprow"><button class="chip ${S.filters.reportType==='month'?'on':''}" data-rtype="month">شهري</button><button class="chip ${S.filters.reportType==='quarter'?'on':''}" data-rtype="quarter">ربع سنوي</button><button class="chip ${S.filters.reportType==='year'?'on':''}" data-rtype="year">سنوي</button></div>
-    ${periodPickerHtml()}
-  </div></div>
-  ${S.filters.reportContentType==='performance'||S.filters.reportContentType==='all'?`<div class="section no-print" style="margin-bottom:14px"><div class="section-body"><div class="field" style="margin-bottom:0"><label>${icon('search')} تقرير موظف محدد (اختياري)</label><select class="input" id="empSelectDropdown"><option value="">-- جميع الموظفين --</option>${S.employees.map(e=>`<option value="${e.id}" ${S.filters.reportSelectedEmpId===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}</select></div></div></div>`:''}
-  <div class="section no-print" style="margin-bottom:14px"><div class="section-head">${icon('search')} تقرير حالة موضوع خلال فترة</div><div class="section-body"><div class="row2"><div class="field"><label>من تاريخ</label><input class="input" type="date" id="subjectFromInput" value="${esc(S.filters.subjectFrom||reportPeriodBounds(S.filters.reportType,S.filters.reportValue).start)}"></div><div class="field"><label>إلى تاريخ</label><input class="input" type="date" id="subjectToInput" value="${esc(S.filters.subjectTo||reportPeriodBounds(S.filters.reportType,S.filters.reportValue).end)}"></div></div><div class="field"><label>اسم الموضوع / المشروع / رقم الطلب</label><input class="input" id="subjectQueryInput" value="${esc(S.filters.subjectQuery||'')}" placeholder="اكتب اسم الموضوع أو المشروع"></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-primary" id="applySubjectReportBtn">${icon('search')} إضافة التفاصيل للتقرير</button>${S.filters.subjectReportEnabled?'<button type="button" class="btn btn-ghost" id="clearSubjectReportBtn">إلغاء التفاصيل</button>':''}</div></div></div>
-  <div id="reportBody">${reportBodyHtml()}</div>`;
-}
-'''
-          s,n=re.subn(r'function renderReports\(\)\{.*?\n\}\nfunction refreshReportBody\(\)',new_render+'function refreshReportBody()',s,flags=re.S)
-          if n!=1: raise SystemExit(f'renderReports replacement count {n}')
-
-          new_wire = r'''function wireReports(){
-  if(S.user.role!=='lead') return;
-  $all('[data-report-content]').forEach(b=>b.addEventListener('click',()=>{S.filters.reportContentType=b.dataset.reportContent;S.filters.reportSelectedEmpId=null;render();}));
-  $all('[data-rtype]').forEach(b=>b.addEventListener('click',()=>{S.filters.reportType=b.dataset.rtype;if(b.dataset.rtype==='quarter') S.filters.reportValue=`${new Date().getFullYear()}-Q${currentQuarter()}`;else if(b.dataset.rtype==='year') S.filters.reportValue=String(new Date().getFullYear());else S.filters.reportValue=todayISO().slice(0,7);render();}));
-  const mi=$('#reportMonthInput'); if(mi) mi.addEventListener('change',()=>{S.filters.reportValue=mi.value;refreshReportBody();});
-  const ys=$('#reportYearSelect'),qs=$('#reportQuarterSelect'); if(ys&&qs){const upd=()=>{S.filters.reportValue=`${ys.value}-Q${qs.value}`;refreshReportBody();};ys.addEventListener('change',upd);qs.addEventListener('change',upd);}
-  const yos=$('#reportYearOnlySelect'); if(yos) yos.addEventListener('change',()=>{S.filters.reportValue=yos.value;refreshReportBody();});
-  const emp=$('#empSelectDropdown'); if(emp) emp.addEventListener('change',()=>{S.filters.reportSelectedEmpId=emp.value||null;render();});
-  const subjectApply=$('#applySubjectReportBtn'); if(subjectApply) subjectApply.addEventListener('click',()=>{const from=$('#subjectFromInput')?.value||'',to=$('#subjectToInput')?.value||'';if(!from||!to){toast('يرجى تحديد تاريخ البداية والنهاية',true);return;}if(from>to){toast('تاريخ البداية يجب أن يكون قبل تاريخ النهاية',true);return;}S.filters.subjectFrom=from;S.filters.subjectTo=to;S.filters.subjectQuery=$('#subjectQueryInput')?.value.trim()||'';S.filters.subjectReportEnabled=true;S.filters.reportSelectedEmpId=null;refreshReportBody();});
-  const subjectClear=$('#clearSubjectReportBtn'); if(subjectClear) subjectClear.addEventListener('click',()=>{S.filters.subjectReportEnabled=false;S.filters.subjectQuery='';render();});
-  wireReportBodyInteractions();
-  const pb=$('#printReportBtn'); if(pb) pb.addEventListener('click',exportReportToPdf);
-  const xb=$('#exportExcelBtn'); if(xb) xb.addEventListener('click',exportReportToExcel);
-}
-'''
-          s,n=re.subn(r'function wireReports\(\)\{.*?\n\}\nfunction runBackupExport\(\)',new_wire+'function runBackupExport()',s,flags=re.S)
-          if n!=1: raise SystemExit(f'wireReports replacement count {n}')
-
-          excel = r'''async function exportReportToExcel(){
-  const btn=$('#exportExcelBtn'); setLoading(btn,true);
-  try{
-    const XLSX=await ensureXLSXLoaded(), data=reportPeriodData(), wb=XLSX.utils.book_new(), selected=selectedReportContentType();
-    const add=(name,headers,rows,widths)=>{const aoa=[[`تقرير فريق التصوير - ${name}`],[`الفترة: ${data.period.label}`],[],headers,...rows];const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=widths.map(w=>({wch:w}));ws['!views']=[{rightToLeft:true}];XLSX.utils.book_append_sheet(wb,ws,name.slice(0,28));};
-    if(selected==='all'||selected==='tasks') add('جدول الأعمال',['م','الموضوع / المشروع','تاريخ البدء','تاريخ الانتهاء','المسؤول','الحالة','التحديات / الملاحظات'],data.tasks.map((t,i)=>[i+1,t.title||'',t.startDate||'',t.endDate||'',(t.responsible||[]).join('، '),taskStatusLabel(t.status),t.notes||'']),[6,38,14,14,28,16,50]);
-    if(selected==='all'||selected==='visits'){
-      const rows=[];let i=1;data.visits.forEach(v=>(v.sites||[{}]).forEach(site=>rows.push([i++,v.date||'',site.projectName||'',site.location||'',site.taskType||'',site.startTime||v.startTime||'',site.endTime||v.endTime||'',(v.conductedBy||[]).join('، '),site.description||''])));
-      add('جدول الزيارات',['م','تاريخ الزيارة','اسم المشروع / الموقع','الموقع','نوع المهمة','وقت البداية','وقت الانتهاء','من قام بالزيارة','الوصف / الملاحظات'],rows,[6,14,34,20,20,12,12,28,48]);
-    }
-    if(selected==='all'||selected==='requests') add('طلبات التصوير',['م','رقم الطلب','الموضوع','التاريخ','الجهة','الموقع','الحالة','الأولوية','التصوير','المونتاج','الملاحظات'],data.requests.map((r,i)=>[i+1,r.requestNumber||'',r.event?.name||'',r.event?.date||'',r.requester?.directorate||'',r.event?.location||'',statusLabel(r.status),priorityLabel(r.priority),empNamesFromIds(r.internal?.assignedPhotographers).join('، '),empNamesFromIds(r.internal?.assignedEditors).join('، '),r.internal?.teamNotes||r.production?.notes||'']),[6,14,34,14,24,24,16,14,24,24,45]);
-    if(selected==='all'||selected==='meetings') add('الاجتماعات',['م','عنوان الاجتماع','التاريخ','وقت البداية','وقت الانتهاء','المكان','الحضور','جدول الأعمال','الملاحظات / المحضر'],data.meetings.map((m,i)=>[i+1,m.title||'',m.date||'',m.startTime||'',m.endTime||'',m.location||'',empNamesFromIds(m.attendees).join('، '),m.agenda||'',m.notes||'']),[6,34,14,12,12,24,30,45,45]);
-    if(selected==='all'||selected==='performance'){
-      const st=computeReportStats(data.period.start,data.period.end);add('أداء الموظفين',['م','الموظف','طلبات تصوير','مونتاج','زيارات','اجتماعات','الإجمالي'],st.perEmp.map((r,i)=>[i+1,r.emp.name,r.asPhotog,r.asEditor,r.visitsLogged,r.meetingsAttended,r.total]),[6,30,14,14,12,12,12]);
-    }
-    appendSubjectSheetToWorkbook(XLSX,wb);
-    XLSX.writeFile(wb,`تقرير-فريق-التصوير-${selected}-${data.period.label}.xlsx`);
-    setLoading(btn,false,'<span>'+icon('doc')+' Excel</span>');toast('تم تصدير التقرير بنجاح');
-  }catch(err){console.error(err);setLoading(btn,false,'<span>'+icon('doc')+' Excel</span>');toast('تعذر التصدير، الرجاء التأكد من الاتصال بالإنترنت',true);}
-}
-'''
-          s,n=re.subn(r'async function exportReportToExcel\(\)\{.*?\n\}\nfunction periodTypeLabel\(',excel+'function periodTypeLabel(',s,flags=re.S)
-          if n!=1: raise SystemExit(f'excel replacement count {n}')
-
-          s=s.replace("pdf.save('تقرير-فريق-التصوير.pdf');","pdf.save(`تقرير-فريق-التصوير-${selectedReportContentType()}-${reportPeriodBounds(S.filters.reportType,S.filters.reportValue).label}.pdf`);")
-          p.write_text(s,encoding='utf-8')
-      - name: Commit patched report system
+          s=Path('index.html').read_text(encoding='utf-8')
+          assert 'function selectedReportContentType()' in s
+          assert 'function tasksStructuredReport(data)' in s
+          assert 'function visitsStructuredReport(data)' in s
+          assert 'data-report-content' in s
+          print('Report patch markers OK')
+          PY
+      - name: Commit patched reports
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add index.html
           git diff --cached --quiet && exit 0
           git commit -m "Redesign reports as structured tables with selectable report types"
-          git push
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
