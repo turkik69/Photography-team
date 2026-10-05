@@ -22,13 +22,11 @@ body{overflow-x:hidden!important}
 if 'definitive full-page scrolling fix for desktop + mobile' not in s:
     pos=s.find(marker)
     if pos<0: raise SystemExit('scroll marker not found')
-    # insert before existing mobile marker so later rules remain compatible
     s=s[:pos]+css+'\n'+s[pos:]
 
-# 2) Replace Excel styling helper with a true Arabic RTL implementation and dynamic row heights.
+# 2) Replace Excel styling helper with true Arabic RTL and dynamic row heights.
 new_style=r'''function styleExcelWorksheet(ws,XLSX,headerRowIndex){
   if(!ws||!ws['!ref']) return;
-  /* Excel expects RTL on the worksheet view using RTL:true. Keep rightToLeft too for compatibility. */
   ws['!views']=[{RTL:true,rightToLeft:true}];
   const range=XLSX.utils.decode_range(ws['!ref']);
   const thin={style:'thin',color:{rgb:'DCE8E1'}};
@@ -76,7 +74,7 @@ new_style=r'''function styleExcelWorksheet(ws,XLSX,headerRowIndex){
   if(range.e.r>headerRowIndex) ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:headerRowIndex,c:range.s.c},e:{r:range.e.r,c:range.e.c}})};
   ws['!freeze']={xSplit:0,ySplit:headerRowIndex+1,topLeftCell:`A${headerRowIndex+2}`,activePane:'bottomRight',state:'frozen'};
 }'''
-s,n=re.subn(r'function styleExcelWorksheet\(ws,XLSX,headerRowIndex\)\{.*?\n\}',new_style,s,count=1,flags=re.S)
+s,n=re.subn(r'function styleExcelWorksheet\(ws,XLSX,headerRowIndex\)\{.*?\n\}',lambda m:new_style,s,count=1,flags=re.S)
 if n!=1: raise SystemExit(f'styleExcelWorksheet replacement count={n}')
 
 # 3) Merge report titles across all columns in normal and subject sheets.
@@ -85,7 +83,7 @@ s=s.replace("const addSheet=(name,headers,rows,widths)=>{const aoa=[['تقرير
 s=s.replace("const add=(name,headers,rows,widths)=>{const aoa=[[`تقرير فريق التصوير - ${name}`],[`الفترة: ${data.period.label}`],[],headers,...rows];const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=widths.map(w=>({wch:w}));styleExcelWorksheet(ws,XLSX,3);XLSX.utils.book_append_sheet(wb,ws,name.slice(0,28));};",
 "const add=(name,headers,rows,widths)=>{const aoa=[[`تقرير فريق التصوير - ${name}`],[`الفترة: ${data.period.label}`],[],headers,...rows];const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=widths.map(w=>({wch:w}));ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:Math.max(0,headers.length-1)}},{s:{r:1,c:0},e:{r:1,c:Math.max(0,headers.length-1)}}];styleExcelWorksheet(ws,XLSX,3);XLSX.utils.book_append_sheet(wb,ws,name.slice(0,28));};")
 
-# 4) Set workbook view RTL too, so Excel opens the workbook from the right edge by default.
+# 4) Set workbook view RTL too.
 s=s.replace("const XLSX=await ensureXLSXLoaded(),data=reportPeriodData(),wb=XLSX.utils.book_new(),selected=selectedReportContentType();",
 "const XLSX=await ensureXLSXLoaded(),data=reportPeriodData(),wb=XLSX.utils.book_new(),selected=selectedReportContentType(); wb.Workbook=wb.Workbook||{}; wb.Workbook.Views=[{RTL:true}];")
 
