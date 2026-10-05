@@ -1,0 +1,1 @@
+Apply the structured reports redesign workflow for the requested table-based reports.

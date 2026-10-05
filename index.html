@@ -534,6 +534,30 @@ html{scroll-behavior:smooth}body{background:var(--workspace-bg)}
 @media(max-width:900px){
   .safe-save-btn{margin-bottom:calc(92px + env(safe-area-inset-bottom))!important}
 }
+
+/* Structured reports — clear table-first layout */
+.report-selector{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+.report-selector .chip{min-width:105px;justify-content:center}
+.report-sheet{background:#fff;border:1px solid #dfe8e3;border-radius:16px;overflow:hidden;margin-bottom:18px;box-shadow:0 4px 18px #1649360a}
+.report-sheet-head{padding:15px 18px;background:#edf5f0;border-bottom:1px solid #dce8e1;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.report-sheet-head h3{margin:0;color:#174a3b;font-size:15px;font-weight:900}
+.report-sheet-head span{font-size:11px;color:#5f786d}
+.report-table-wrap{overflow:auto;width:100%}
+.report-table{width:100%;border-collapse:collapse;min-width:850px;font-size:12px;background:#fff}
+.report-table th{background:#2f6f24;color:#fff;font-weight:800;padding:10px 9px;border:1px solid #d8e1d9;white-space:nowrap;text-align:right}
+.report-table td{padding:9px;border:1px solid #e1e7e3;vertical-align:top;line-height:1.65;color:#304a41}
+.report-table tbody tr:nth-child(even){background:#f7faf8}
+.report-table tbody tr:hover{background:#eef7f1}
+.report-table .num-cell{width:44px;text-align:center;font-weight:800;color:#315f45}
+.report-table .status-done{background:#e8f5ec;color:#23724b;font-weight:800}
+.report-table .status-progress{background:#fff4d8;color:#976a12;font-weight:800}
+.report-table .status-alert{background:#fdeaea;color:#a23d36;font-weight:800}
+.report-summary-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 16px}
+.report-summary-item{background:#fff;border:1px solid #e0e8e3;border-radius:12px;padding:13px 14px}
+.report-summary-item strong{display:block;font-size:22px;color:#205743}.report-summary-item span{font-size:11px;color:#677e74}
+@media(max-width:900px){.report-summary-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.report-table{min-width:760px}}
+@media print{.report-sheet{box-shadow:none;border-color:#bbb}.report-table th{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#2f6f24!important;color:#fff!important}.report-table td{font-size:10px;padding:6px}.report-table{min-width:0}}
+
 </style>
 </head>
 <body>
@@ -3764,114 +3788,71 @@ function detailedSubjectReportHtml(){
   </div>`;
 }
 
+
+function selectedReportContentType(){ return S.filters.reportContentType||'all'; }
+function reportPeriodData(){
+  const p=reportPeriodBounds(S.filters.reportType,S.filters.reportValue);
+  return {
+    period:p,
+    requests:S.requests.filter(r=>!r.deleted&&r.event&&r.event.date&&r.event.date>=p.start&&r.event.date<=p.end),
+    visits:S.visits.filter(v=>v.certified!==false&&v.date&&v.date>=p.start&&v.date<=p.end),
+    meetings:S.meetings.filter(m=>!m.deleted&&m.date&&m.date>=p.start&&m.date<=p.end),
+    tasks:S.tasks.filter(t=>!t.deleted&&t.startDate&&t.startDate>=p.start&&t.startDate<=p.end)
+  };
+}
+function reportStatusClass(label){
+  const x=String(label||'');
+  if(x.includes('انتهاء')||x.includes('مكتمل')||x.includes('تم التسليم')) return 'status-done';
+  if(x.includes('جاري')||x.includes('إسناد')||x.includes('مستلم')) return 'status-progress';
+  if(x.includes('عاجل')||x.includes('متأخر')) return 'status-alert';
+  return '';
+}
+function reportSheetHtml(title,subtitle,headers,rows){
+  return `<section class="report-sheet"><div class="report-sheet-head"><h3>${esc(title)}</h3><span>${esc(subtitle||'')}</span></div><div class="report-table-wrap"><table class="report-table"><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.map(row=>`<tr>${row.map((c,i)=>`<td class="${i===0?'num-cell ':''}${c&&c.statusClass?c.statusClass:''}">${c&&typeof c==='object'?esc(c.text||''):esc(c==null?'':String(c))}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${headers.length}" style="text-align:center;padding:24px;color:#71877d">لا توجد بيانات خلال الفترة المحددة</td></tr>`}</tbody></table></div></section>`;
+}
+function tasksStructuredReport(data){
+  const rows=data.tasks.slice().sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||'')).map((t,i)=>[i+1,t.title||'',t.startDate||'',t.endDate||'',(t.responsible||[]).join('، '),{text:taskStatusLabel(t.status),statusClass:reportStatusClass(taskStatusLabel(t.status))},t.notes||'']);
+  return reportSheetHtml('جدول الأعمال',data.period.label,['م','الموضوع / المشروع','تاريخ البدء','تاريخ الانتهاء','المسؤول','الحالة','التحديات / الملاحظات'],rows);
+}
+function visitsStructuredReport(data){
+  const rows=[]; let n=1;
+  data.visits.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).forEach(v=>{const sites=(v.sites&&v.sites.length)?v.sites:[{}];sites.forEach(site=>rows.push([n++,v.date||'',site.projectName||'',site.location||'',site.taskType||'',site.startTime||v.startTime||'',site.endTime||v.endTime||'',(v.conductedBy||[]).join('، '),site.description||'']));});
+  return reportSheetHtml('جدول الزيارات',data.period.label,['م','تاريخ الزيارة','اسم المشروع / الموقع','الموقع','نوع المهمة','وقت البداية','وقت الانتهاء','من قام بالزيارة','الوصف / الملاحظات'],rows);
+}
+function requestsStructuredReport(data){
+  const rows=data.requests.slice().sort((a,b)=>(a.event?.date||'').localeCompare(b.event?.date||'')).map((r,i)=>[i+1,r.requestNumber||'',r.event?.name||'',r.event?.date||'',r.requester?.directorate||'',r.event?.location||'',{text:statusLabel(r.status),statusClass:reportStatusClass(statusLabel(r.status))},priorityLabel(r.priority),empNamesFromIds(r.internal?.assignedPhotographers).join('، '),empNamesFromIds(r.internal?.assignedEditors).join('، '),r.internal?.teamNotes||r.production?.notes||'']);
+  return reportSheetHtml('طلبات التصوير',data.period.label,['م','رقم الطلب','الموضوع','التاريخ','الجهة','الموقع','الحالة','الأولوية','التصوير','المونتاج','الملاحظات'],rows);
+}
+function meetingsStructuredReport(data){
+  const rows=data.meetings.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map((m,i)=>[i+1,m.title||'',m.date||'',m.startTime||'',m.endTime||'',m.location||'',empNamesFromIds(m.attendees).join('، '),m.agenda||'',m.notes||'']);
+  return reportSheetHtml('الاجتماعات',data.period.label,['م','عنوان الاجتماع','التاريخ','وقت البداية','وقت الانتهاء','المكان','الحضور','جدول الأعمال','الملاحظات / المحضر'],rows);
+}
+function performanceStructuredReport(data){
+  const stats=computeReportStats(data.period.start,data.period.end);
+  const rows=stats.perEmp.map((r,i)=>[i+1,r.emp.name,r.asPhotog,r.asEditor,r.visitsLogged,r.meetingsAttended,r.total]);
+  return reportSheetHtml('أداء الموظفين',data.period.label,['م','الموظف','طلبات تصوير','مونتاج','زيارات','اجتماعات','الإجمالي'],rows);
+}
+
 function reportBodyHtml(){
-  const type=S.filters.reportType;
-  const period=reportPeriodBounds(type,S.filters.reportValue);
-  if(S.filters.reportSelectedEmpId){
-    const emp=S.employees.find(e=>e.id===S.filters.reportSelectedEmpId);
-    if(emp) return employeeDetailReportHtml(emp, period);
-  }
-  const stats=computeReportStats(period.start,period.end);
-  const taskTypeEntries=Object.entries(stats.byTaskType).sort((a,b)=>b[1]-a[1]);
-  const statusChartRows=['submitted','received','assigned','completed'].map(s=>({label:statusLabel(s),value:stats.reqByStatus[s]}));
-  const taskTypeChartRows=taskTypeEntries.map(([t,c])=>({label:t,value:c}));
-  const empChartRows=stats.perEmp.filter(row=>row.total>0).slice(0,8).map(row=>({label:row.emp.name,value:row.total,color:'var(--gold-600)'}));
-  return `
-  <div class="print-header">
-    <img src="data:image/png;base64,${LOGO_B64}" alt="">
-    <div>
-      <h2>تقرير فريق التصوير — ${esc(period.label)}</h2>
-      <p>دائرة الفعاليات والتوعية - بلدية مسقط</p>
-    </div>
-  </div>
-  <div class="stat-grid" style="margin-bottom:16px">
-    <div class="stat-card"><span class="num">${stats.reqTotal}</span><span class="lbl">طلبات التصوير</span></div>
-    <div class="stat-card gold"><span class="num">${stats.visitDays}</span><span class="lbl">أيام زيارات (${stats.totalSiteVisits} موقع)</span></div>
-    <div class="stat-card" style="border-color:var(--blue-600)"><span class="num">${stats.meetingsTotal}</span><span class="lbl">اجتماعات</span></div>
-    <div class="stat-card urgent"><span class="num">${stats.reqByPriority.urgent}</span><span class="lbl">طلبات عاجلة</span></div>
-  </div>
-  <div class="section" style="margin-bottom:14px">
-    <div class="section-head">${icon('doc')} الطلبات حسب الحالة</div>
-    <div class="section-body">${barChartHtml(statusChartRows)}</div>
-  </div>
-  <div class="section" style="margin-bottom:14px">
-    <div class="section-head">${icon('pin')} الزيارات حسب نوع المهمة</div>
-    <div class="section-body">${taskTypeChartRows.length?barChartHtml(taskTypeChartRows):'<p class="muted">لا توجد زيارات في هذه الفترة</p>'}</div>
-  </div>
-  <div class="section" style="margin-bottom:14px">
-    <div class="section-head gold">${icon('award')} مؤشر الأداء — الأعلى نشاطاً</div>
-    <div class="section-body">${empChartRows.length?barChartHtml(empChartRows):'<p class="muted">لا يوجد نشاط مسجّل بعد</p>'}</div>
-  </div>
-  ${detailedSubjectReportHtml()}
-  <div class="section" style="margin-bottom:20px">
-    <div class="section-head">${icon('award')} أداء الموظفين وإنجازاتهم (تفصيلي)</div>
-    <div class="section-body" style="padding:0">
-      ${stats.perEmp.map(row=>`
-        <button type="button" class="list-item" style="width:100%;text-align:right;border:none;background:none" data-view-emp="${row.emp.id}">
-          <div class="avatar-sm" style="width:36px;height:36px">${avatarInner(row.emp)}</div>
-          <div class="list-item-body">
-            <div class="list-item-title">${esc(row.emp.name)}</div>
-            <div class="list-item-sub">${row.asPhotog} تصوير · ${row.asEditor} مونتاج · ${row.visitsLogged} زيارة · ${row.meetingsAttended} اجتماع</div>
-          </div>
-          <div style="font-weight:800;color:var(--green-700);font-size:15px">${row.total}</div>
-        </button>`).join('')||'<p class="muted" style="padding:16px">لا يوجد موظفون</p>'}
-    </div>
-  </div>`;
+  const data=reportPeriodData();
+  if(S.filters.reportSelectedEmpId){const emp=S.employees.find(e=>e.id===S.filters.reportSelectedEmpId);if(emp) return employeeDetailReportHtml(emp,data.period);}
+  const selected=selectedReportContentType(),stats=computeReportStats(data.period.start,data.period.end);let sections='';
+  if(selected==='all'||selected==='tasks') sections+=tasksStructuredReport(data);
+  if(selected==='all'||selected==='visits') sections+=visitsStructuredReport(data);
+  if(selected==='all'||selected==='requests') sections+=requestsStructuredReport(data);
+  if(selected==='all'||selected==='meetings') sections+=meetingsStructuredReport(data);
+  if(selected==='all'||selected==='performance') sections+=performanceStructuredReport(data);
+  return `<div class="print-header"><img src="data:image/png;base64,${LOGO_B64}" alt=""><div><h2>تقرير فريق التصوير — ${esc(data.period.label)}</h2><p>دائرة الفعاليات والتوعية - بلدية مسقط</p></div></div><div class="report-summary-strip"><div class="report-summary-item"><strong>${stats.reqTotal}</strong><span>طلبات تصوير</span></div><div class="report-summary-item"><strong>${stats.visitDays}</strong><span>أيام زيارات</span></div><div class="report-summary-item"><strong>${data.tasks.length}</strong><span>بنود جدول الأعمال</span></div><div class="report-summary-item"><strong>${stats.meetingsTotal}</strong><span>اجتماعات</span></div></div>${sections}${detailedSubjectReportHtml()}`;
 }
 function renderReports(){
   if(S.user.role!=='lead') return `<div class="empty-state">${icon('alert')}<h3>هذه الصفحة مخصصة للمشرف فقط</h3></div>`;
-  if(!S.filters.reportType) S.filters.reportType='month';
-  if(!S.filters.reportValue) S.filters.reportValue=todayISO().slice(0,7);
-  return `
-  <div class="section-title-row no-print"><h2>التقارير والأداء</h2>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-outline btn-sm" id="exportExcelBtn">${icon('doc')} Excel</button>
-      <button class="btn btn-outline btn-sm" id="printReportBtn">${icon('doc')} PDF</button>
-    </div>
-  </div>
-  <div class="chiprow no-print" id="reportTypeChiprow">
-    <button class="chip ${S.filters.reportType==='month'?'on':''}" data-rtype="month">شهري</button>
-    <button class="chip ${S.filters.reportType==='quarter'?'on':''}" data-rtype="quarter">ربع سنوي</button>
-    <button class="chip ${S.filters.reportType==='year'?'on':''}" data-rtype="year">سنوي</button>
-  </div>
-  <div class="section no-print" style="margin-bottom:14px"><div class="section-body">${periodPickerHtml()}</div></div>
-  <div class="section no-print" style="margin-bottom:14px">
-    <div class="section-head">${icon('search')} تقرير حالة موضوع خلال فترة</div>
-    <div class="section-body">
-      <div class="row2">
-        <div class="field"><label>من تاريخ</label><input class="input" type="date" id="subjectFromInput" value="${esc(S.filters.subjectFrom||reportPeriodBounds(S.filters.reportType,S.filters.reportValue).start)}"></div>
-        <div class="field"><label>إلى تاريخ</label><input class="input" type="date" id="subjectToInput" value="${esc(S.filters.subjectTo||reportPeriodBounds(S.filters.reportType,S.filters.reportValue).end)}"></div>
-      </div>
-      <div class="field"><label>اسم الموضوع / المشروع / رقم الطلب</label><input class="input" id="subjectQueryInput" value="${esc(S.filters.subjectQuery||'')}" placeholder="مثال: تغطية فعالية، اسم مشروع، REQ-..."></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button type="button" class="btn btn-primary" id="applySubjectReportBtn">${icon('search')} إنشاء التقرير التفصيلي</button>
-        ${S.filters.subjectReportEnabled?'<button type="button" class="btn btn-ghost" id="clearSubjectReportBtn">إلغاء التقرير التفصيلي</button>':''}
-      </div>
-      <p class="hint" style="margin-top:9px">سيجمع التقرير كل ما يطابق الموضوع من طلبات التصوير والزيارات والمهام والاجتماعات خلال الفترة المحددة، ويظهر الشرح التفصيلي أيضاً عند استخراج PDF.</p>
-    </div>
-  </div>
-  <div class="section no-print" style="margin-bottom:14px"><div class="section-body">
-    <div class="field" style="margin-bottom:0">
-      <label>${icon('search')} عرض تقرير موظف محدد</label>
-      <select class="input" id="empSelectDropdown">
-        <option value="">-- اختيار موظف --</option>
-        ${S.employees.map(e=>`<option value="${e.id}" ${S.filters.reportSelectedEmpId===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}
-      </select>
-    </div>
-  </div></div>
-
-  <section class="operational-card no-print" style="margin-bottom:14px">
-    <div class="operational-card-head"><h3>متابعة طلبات التصوير</h3><span class="muted">الحالة الحالية للطلبات خلال الفترة المختارة</span></div>
-    <div class="pipeline" style="padding:16px">
-      ${(()=>{
-        const p=reportPeriodBounds(S.filters.reportType,S.filters.reportValue);
-        const items=S.requests.filter(r=>!r.deleted&&requestDueDate(r)>=p.start&&requestDueDate(r)<=p.end);
-        return [['submitted','جديد'],['received','مستلم'],['assigned','تم الإسناد'],['completed','مكتمل']].map(([k,label])=>`<div class="pipeline-stage ${k==='completed'?'done':''}"><strong>${items.filter(r=>r.status===k).length}</strong><span>${label}</span></div>`).join('');
-      })()}
-    </div>
-  </section>
-  <div id="reportBody">${reportBodyHtml()}</div>
-  `;
+  if(!S.filters.reportType) S.filters.reportType='month'; if(!S.filters.reportValue) S.filters.reportValue=todayISO().slice(0,7); if(!S.filters.reportContentType) S.filters.reportContentType='all';
+  const types=[['all','الكل'],['tasks','جدول الأعمال'],['visits','الزيارات'],['requests','طلبات التصوير'],['meetings','الاجتماعات'],['performance','أداء الموظفين']];
+  return `<div class="section-title-row no-print"><div><h2>التقارير والأداء</h2><p class="muted" style="margin-top:4px">اختر نوع التقرير والفترة ثم استخرجه بصيغة PDF أو Excel</p></div><div style="display:flex;gap:8px"><button class="btn btn-outline btn-sm" id="exportExcelBtn">${icon('doc')} Excel</button><button class="btn btn-outline btn-sm" id="printReportBtn">${icon('doc')} PDF</button></div></div>
+  <div class="section no-print" style="margin-bottom:14px"><div class="section-body"><div class="field"><label>نوع التقرير المطلوب</label><div class="report-selector">${types.map(([k,l])=>`<button type="button" class="chip ${S.filters.reportContentType===k?'on':''}" data-report-content="${k}">${l}</button>`).join('')}</div></div><div class="chiprow" id="reportTypeChiprow"><button class="chip ${S.filters.reportType==='month'?'on':''}" data-rtype="month">شهري</button><button class="chip ${S.filters.reportType==='quarter'?'on':''}" data-rtype="quarter">ربع سنوي</button><button class="chip ${S.filters.reportType==='year'?'on':''}" data-rtype="year">سنوي</button></div>${periodPickerHtml()}</div></div>
+  ${S.filters.reportContentType==='performance'||S.filters.reportContentType==='all'?`<div class="section no-print" style="margin-bottom:14px"><div class="section-body"><div class="field" style="margin-bottom:0"><label>${icon('search')} تقرير موظف محدد (اختياري)</label><select class="input" id="empSelectDropdown"><option value="">-- جميع الموظفين --</option>${S.employees.map(e=>`<option value="${e.id}" ${S.filters.reportSelectedEmpId===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}</select></div></div></div>`:''}
+  <div class="section no-print" style="margin-bottom:14px"><div class="section-head">${icon('search')} تقرير حالة موضوع خلال فترة</div><div class="section-body"><div class="row2"><div class="field"><label>من تاريخ</label><input class="input" type="date" id="subjectFromInput" value="${esc(S.filters.subjectFrom||reportPeriodBounds(S.filters.reportType,S.filters.reportValue).start)}"></div><div class="field"><label>إلى تاريخ</label><input class="input" type="date" id="subjectToInput" value="${esc(S.filters.subjectTo||reportPeriodBounds(S.filters.reportType,S.filters.reportValue).end)}"></div></div><div class="field"><label>اسم الموضوع / المشروع / رقم الطلب</label><input class="input" id="subjectQueryInput" value="${esc(S.filters.subjectQuery||'')}" placeholder="اكتب اسم الموضوع أو المشروع"></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-primary" id="applySubjectReportBtn">${icon('search')} إضافة التفاصيل للتقرير</button>${S.filters.subjectReportEnabled?'<button type="button" class="btn btn-ghost" id="clearSubjectReportBtn">إلغاء التفاصيل</button>':''}</div></div></div>
+  <div id="reportBody">${reportBodyHtml()}</div>`;
 }
 function refreshReportBody(){ const w=$('#reportBody'); if(w){ w.innerHTML=reportBodyHtml(); wireReportBodyInteractions(); } }
 function wireReportBodyInteractions(){
@@ -3924,7 +3905,7 @@ async function exportReportToPdf(){
       pdf.addImage(sliceCanvas.toDataURL('image/jpeg',0.92), 'JPEG', 0, 0, imgWmm, sliceHmm);
       prevY=cssY;
     });
-    pdf.save('تقرير-فريق-التصوير.pdf');
+    pdf.save(`تقرير-فريق-التصوير-${selectedReportContentType()}-${reportPeriodBounds(S.filters.reportType,S.filters.reportValue).label}.pdf`);
     setLoading(btn,false,'<span>'+icon('doc')+' PDF</span>');
   }catch(err){
     console.error(err);
@@ -3965,104 +3946,17 @@ function appendSubjectSheetToWorkbook(XLSX,wb){
   XLSX.utils.book_append_sheet(wb,ws,'حالة موضوع');
 }
 async function exportReportToExcel(){
-  const btn=$('#exportExcelBtn');
-  setLoading(btn,true);
+  const btn=$('#exportExcelBtn'); setLoading(btn,true);
   try{
-    const XLSX=await ensureXLSXLoaded();
-    const period=reportPeriodBounds(S.filters.reportType, S.filters.reportValue);
-    const wb=XLSX.utils.book_new();
-    appendSubjectSheetToWorkbook(XLSX,wb);
-    if(S.filters.reportSelectedEmpId){
-      const emp=S.employees.find(e=>e.id===S.filters.reportSelectedEmpId);
-      if(emp){
-        const d=computeEmployeeDetail(emp.id, emp.name, period.start, period.end);
-        /* نفس ترتيب صفحة تقرير الموظف بالمنصة: بيانات الموظف، ثم بطاقات الأعداد، ثم كل قسم بترتيبه */
-        const rows=[
-          [`تقرير أداء ${emp.name}`],
-          [`دائرة الفعاليات والتوعية - بلدية مسقط`],
-          [`الفترة: ${period.label}`],
-          [],
-          [`${emp.jobTitle||''}${emp.capacity?' - '+emp.capacity:''}`],
-          [],
-          ['طلبات كمصور', d.reqAsPhotog.length, '', 'طلبات كمونتير', d.reqAsEditor.length],
-          ['زيارات', d.visitsConducted.length, '', 'اجتماعات', d.meetingsAttended.length],
-          [],
-        ];
-        const reqMap=new Map();
-        d.reqAsPhotog.forEach(r=>reqMap.set(r.id,{r,photog:true,editor:false}));
-        d.reqAsEditor.forEach(r=>{ const ex=reqMap.get(r.id); if(ex) ex.editor=true; else reqMap.set(r.id,{r,photog:false,editor:true}); });
-        if(reqMap.size){
-          rows.push(['طلبات التصوير']);
-          rows.push(['العنوان','رقم الطلب','التاريخ','الدور']);
-          [...reqMap.values()].forEach(({r,photog,editor})=>{
-            const role=photog&&editor?'تصوير ومونتاج':photog?'تصوير':'مونتاج';
-            rows.push([(r.event&&r.event.name)||'', r.requestNumber||'', (r.event&&r.event.date)||'', role]);
-          });
-          rows.push([]);
-        }
-        if(d.visitsConducted.length){
-          rows.push(['الزيارات']);
-          rows.push(['التاريخ','وقت البداية','وقت الانتهاء','المواقع']);
-          d.visitsConducted.forEach(v=>rows.push([v.date?fmtDate(v.date):'بدون تاريخ', v.startTime||'', v.endTime||'', (v.sites||[]).map(s=>s.projectName+(s.startTime||s.endTime?' ('+(s.startTime||'—')+(s.endTime?' - '+s.endTime:'')+')':'')).join('، ')]));
-          rows.push([]);
-        }
-        if(d.meetingsAttended.length){
-          rows.push(['الاجتماعات']);
-          rows.push(['العنوان','التاريخ','وقت البداية','وقت الانتهاء']);
-          d.meetingsAttended.forEach(m=>rows.push([m.title||'', fmtDateShort(m.date), m.startTime||'', m.endTime||'']));
-          rows.push([]);
-        }
-        if(d.tasksResponsible.length){
-          rows.push(['المهام والمشاريع']);
-          rows.push(['العنوان','الحالة']);
-          d.tasksResponsible.forEach(t=>rows.push([t.title||'', taskStatusLabel(t.status)]));
-        }
-        const ws=XLSX.utils.aoa_to_sheet(rows);
-        ws['!cols']=[{wch:34},{wch:16},{wch:14},{wch:16},{wch:12}];
-        ws['!views']=[{rightToLeft:true}];
-        XLSX.utils.book_append_sheet(wb, ws, (emp.name||'تقرير').slice(0,28));
-        XLSX.writeFile(wb, `تقرير-${emp.name}-${period.label}.xlsx`);
-      }
-    } else {
-      const stats=computeReportStats(period.start, period.end);
-      /* نفس ترتيب صفحة التقارير بالمنصة بالضبط: بطاقات الأعداد، ثم كل رسم بياني بترتيبه، ثم الجدول التفصيلي */
-      const rows=[
-        [`تقرير فريق التصوير`],
-        [`دائرة الفعاليات والتوعية - بلدية مسقط`],
-        [`الفترة: ${period.label}`],
-        [],
-        ['طلبات التصوير', stats.reqTotal, '', 'طلبات عاجلة', stats.reqByPriority.urgent],
-        ['أيام الزيارات', stats.visitDays, '', 'إجمالي المواقع', stats.totalSiteVisits],
-        ['الاجتماعات', stats.meetingsTotal],
-        [],
-        ['الطلبات حسب الحالة'],
-        ['الحالة','العدد'],
-      ];
-      ['submitted','received','assigned','completed'].forEach(s=>rows.push([statusLabel(s), stats.reqByStatus[s]]));
-      rows.push([]);
-      const typeEntries=Object.entries(stats.byTaskType).sort((a,b)=>b[1]-a[1]);
-      if(typeEntries.length){
-        rows.push(['الزيارات حسب نوع المهمة']);
-        rows.push(['نوع المهمة','العدد']);
-        typeEntries.forEach(([t,c])=>rows.push([t,c]));
-        rows.push([]);
-      }
-      rows.push(['أداء الموظفين وإنجازاتهم']);
-      rows.push(['الموظف','طلبات (تصوير)','طلبات (مونتاج)','زيارات','اجتماعات','الإجمالي']);
-      stats.perEmp.forEach(row=>rows.push([row.emp.name, row.asPhotog, row.asEditor, row.visitsLogged, row.meetingsAttended, row.total]));
-      const ws=XLSX.utils.aoa_to_sheet(rows);
-      ws['!cols']=[{wch:30},{wch:16},{wch:14},{wch:14},{wch:12},{wch:12}];
-      ws['!views']=[{rightToLeft:true}];
-      XLSX.utils.book_append_sheet(wb, ws, 'تقرير فريق التصوير');
-      XLSX.writeFile(wb, `تقرير-فريق-التصوير-${period.label}.xlsx`);
-    }
-    setLoading(btn,false,'<span>'+icon('doc')+' Excel</span>');
-    toast('تم تصدير الملف بنجاح');
-  }catch(err){
-    console.error(err);
-    setLoading(btn,false,'<span>'+icon('doc')+' Excel</span>');
-    toast('تعذر التصدير، الرجاء التأكد من الاتصال بالإنترنت',true);
-  }
+    const XLSX=await ensureXLSXLoaded(),data=reportPeriodData(),wb=XLSX.utils.book_new(),selected=selectedReportContentType();
+    const add=(name,headers,rows,widths)=>{const aoa=[[`تقرير فريق التصوير - ${name}`],[`الفترة: ${data.period.label}`],[],headers,...rows];const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=widths.map(w=>({wch:w}));ws['!views']=[{rightToLeft:true}];XLSX.utils.book_append_sheet(wb,ws,name.slice(0,28));};
+    if(selected==='all'||selected==='tasks') add('جدول الأعمال',['م','الموضوع / المشروع','تاريخ البدء','تاريخ الانتهاء','المسؤول','الحالة','التحديات / الملاحظات'],data.tasks.map((t,i)=>[i+1,t.title||'',t.startDate||'',t.endDate||'',(t.responsible||[]).join('، '),taskStatusLabel(t.status),t.notes||'']),[6,38,14,14,28,16,50]);
+    if(selected==='all'||selected==='visits'){const rows=[];let i=1;data.visits.forEach(v=>(v.sites||[{}]).forEach(site=>rows.push([i++,v.date||'',site.projectName||'',site.location||'',site.taskType||'',site.startTime||v.startTime||'',site.endTime||v.endTime||'',(v.conductedBy||[]).join('، '),site.description||''])));add('جدول الزيارات',['م','تاريخ الزيارة','اسم المشروع / الموقع','الموقع','نوع المهمة','وقت البداية','وقت الانتهاء','من قام بالزيارة','الوصف / الملاحظات'],rows,[6,14,34,20,20,12,12,28,48]);}
+    if(selected==='all'||selected==='requests') add('طلبات التصوير',['م','رقم الطلب','الموضوع','التاريخ','الجهة','الموقع','الحالة','الأولوية','التصوير','المونتاج','الملاحظات'],data.requests.map((r,i)=>[i+1,r.requestNumber||'',r.event?.name||'',r.event?.date||'',r.requester?.directorate||'',r.event?.location||'',statusLabel(r.status),priorityLabel(r.priority),empNamesFromIds(r.internal?.assignedPhotographers).join('، '),empNamesFromIds(r.internal?.assignedEditors).join('، '),r.internal?.teamNotes||r.production?.notes||'']),[6,14,34,14,24,24,16,14,24,24,45]);
+    if(selected==='all'||selected==='meetings') add('الاجتماعات',['م','عنوان الاجتماع','التاريخ','وقت البداية','وقت الانتهاء','المكان','الحضور','جدول الأعمال','الملاحظات / المحضر'],data.meetings.map((m,i)=>[i+1,m.title||'',m.date||'',m.startTime||'',m.endTime||'',m.location||'',empNamesFromIds(m.attendees).join('، '),m.agenda||'',m.notes||'']),[6,34,14,12,12,24,30,45,45]);
+    if(selected==='all'||selected==='performance'){const st=computeReportStats(data.period.start,data.period.end);add('أداء الموظفين',['م','الموظف','طلبات تصوير','مونتاج','زيارات','اجتماعات','الإجمالي'],st.perEmp.map((r,i)=>[i+1,r.emp.name,r.asPhotog,r.asEditor,r.visitsLogged,r.meetingsAttended,r.total]),[6,30,14,14,12,12,12]);}
+    appendSubjectSheetToWorkbook(XLSX,wb); XLSX.writeFile(wb,`تقرير-فريق-التصوير-${selected}-${data.period.label}.xlsx`); setLoading(btn,false,'<span>'+icon('doc')+' Excel</span>');toast('تم تصدير التقرير بنجاح');
+  }catch(err){console.error(err);setLoading(btn,false,'<span>'+icon('doc')+' Excel</span>');toast('تعذر التصدير، الرجاء التأكد من الاتصال بالإنترنت',true);}
 }
 function periodTypeLabel(t){ return t==='quarter'?'ربع سنوي':t==='year'?'سنوي':'شهري'; }
 function periodTypeTitleLabel(t){ return t==='quarter'?'ربع السنوية':t==='year'?'السنوية':'الشهرية'; }
@@ -4603,49 +4497,15 @@ function wireNewsletterView(id){
 }
 function wireReports(){
   if(S.user.role!=='lead') return;
-  $all('[data-rtype]').forEach(b=>b.addEventListener('click',()=>{
-    S.filters.reportType=b.dataset.rtype;
-    if(b.dataset.rtype==='quarter') S.filters.reportValue=`${new Date().getFullYear()}-Q${currentQuarter()}`;
-    else if(b.dataset.rtype==='year') S.filters.reportValue=String(new Date().getFullYear());
-    else S.filters.reportValue=todayISO().slice(0,7);
-    render();
-  }));
-  const mi=$('#reportMonthInput');
-  if(mi) mi.addEventListener('change',()=>{ S.filters.reportValue=mi.value; refreshReportBody(); });
-  const ys=$('#reportYearSelect'), qs=$('#reportQuarterSelect');
-  if(ys&&qs){ const upd=()=>{ S.filters.reportValue=`${ys.value}-Q${qs.value}`; refreshReportBody(); }; ys.addEventListener('change',upd); qs.addEventListener('change',upd); }
-  const yos=$('#reportYearOnlySelect');
-  if(yos) yos.addEventListener('change',()=>{ S.filters.reportValue=yos.value; refreshReportBody(); });
-  const subjectApply=$('#applySubjectReportBtn');
-  if(subjectApply) subjectApply.addEventListener('click',()=>{
-    const from=$('#subjectFromInput')?.value||'';
-    const to=$('#subjectToInput')?.value||'';
-    if(!from||!to){ toast('يرجى تحديد تاريخ البداية والنهاية',true); return; }
-    if(from>to){ toast('تاريخ البداية يجب أن يكون قبل تاريخ النهاية',true); return; }
-    S.filters.subjectFrom=from;
-    S.filters.subjectTo=to;
-    S.filters.subjectQuery=$('#subjectQueryInput')?.value.trim()||'';
-    S.filters.subjectReportEnabled=true;
-    S.filters.reportSelectedEmpId=null;
-    refreshReportBody();
-    toast('تم إنشاء التقرير التفصيلي');
-  });
-  const subjectClear=$('#clearSubjectReportBtn');
-  if(subjectClear) subjectClear.addEventListener('click',()=>{
-    S.filters.subjectReportEnabled=false;
-    S.filters.subjectQuery='';
-    render();
-  });
-  const empSelect=$('#empSelectDropdown');
-  if(empSelect) empSelect.addEventListener('change',()=>{
-    S.filters.reportSelectedEmpId=empSelect.value||null;
-    render();
-  });
-  wireReportBodyInteractions();
-  const pb=$('#printReportBtn');
-  if(pb) pb.addEventListener('click',exportReportToPdf);
-  const xb=$('#exportExcelBtn');
-  if(xb) xb.addEventListener('click',exportReportToExcel);
+  $all('[data-report-content]').forEach(b=>b.addEventListener('click',()=>{S.filters.reportContentType=b.dataset.reportContent;S.filters.reportSelectedEmpId=null;render();}));
+  $all('[data-rtype]').forEach(b=>b.addEventListener('click',()=>{S.filters.reportType=b.dataset.rtype;if(b.dataset.rtype==='quarter') S.filters.reportValue=`${new Date().getFullYear()}-Q${currentQuarter()}`;else if(b.dataset.rtype==='year') S.filters.reportValue=String(new Date().getFullYear());else S.filters.reportValue=todayISO().slice(0,7);render();}));
+  const mi=$('#reportMonthInput'); if(mi) mi.addEventListener('change',()=>{S.filters.reportValue=mi.value;refreshReportBody();});
+  const ys=$('#reportYearSelect'),qs=$('#reportQuarterSelect'); if(ys&&qs){const upd=()=>{S.filters.reportValue=`${ys.value}-Q${qs.value}`;refreshReportBody();};ys.addEventListener('change',upd);qs.addEventListener('change',upd);}
+  const yos=$('#reportYearOnlySelect'); if(yos) yos.addEventListener('change',()=>{S.filters.reportValue=yos.value;refreshReportBody();});
+  const emp=$('#empSelectDropdown'); if(emp) emp.addEventListener('change',()=>{S.filters.reportSelectedEmpId=emp.value||null;render();});
+  const subjectApply=$('#applySubjectReportBtn'); if(subjectApply) subjectApply.addEventListener('click',()=>{const from=$('#subjectFromInput')?.value||'',to=$('#subjectToInput')?.value||'';if(!from||!to){toast('يرجى تحديد تاريخ البداية والنهاية',true);return;}if(from>to){toast('تاريخ البداية يجب أن يكون قبل تاريخ النهاية',true);return;}S.filters.subjectFrom=from;S.filters.subjectTo=to;S.filters.subjectQuery=$('#subjectQueryInput')?.value.trim()||'';S.filters.subjectReportEnabled=true;S.filters.reportSelectedEmpId=null;refreshReportBody();});
+  const subjectClear=$('#clearSubjectReportBtn'); if(subjectClear) subjectClear.addEventListener('click',()=>{S.filters.subjectReportEnabled=false;S.filters.subjectQuery='';render();});
+  wireReportBodyInteractions(); const pb=$('#printReportBtn'); if(pb) pb.addEventListener('click',exportReportToPdf); const xb=$('#exportExcelBtn'); if(xb) xb.addEventListener('click',exportReportToExcel);
 }
 function runBackupExport(){
   const data={
