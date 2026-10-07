@@ -242,6 +242,7 @@ textarea.input{resize:vertical;min-height:78px}
 .badge-status-completed{background:var(--green-100);color:var(--green-800)}
 .badge-role-lead{background:var(--gold-100);color:var(--gold-700)}
 .badge-role-member{background:var(--green-100);color:var(--green-800)}
+.badge-role-viewer{background:var(--paper-100);color:var(--ink-500);border:1px solid var(--line-strong)}
 
 /* ---------- Lists ---------- */
 .list-item{
@@ -975,16 +976,20 @@ function empTileLabel(e){
     ? `<span style="display:flex;flex-direction:column;line-height:1.35"><span>${esc(e.name)}</span><small class="muted" style="font-size:11px">${esc(e.jobTitle)}</small></span>`
     : `<span>${esc(e.name)}</span>`;
 }
+function isViewer(){ return !!(S.user&&S.user.role==='viewer'); }
+function employeeRoleLabel(role){ return role==='lead'?'مشرف':role==='viewer'?'اطلاع فقط':'عضو فريق'; }
+function workingTeamEmployees(){ return S.employees.filter(e=>e.role!=='viewer'); }
+function reportableNames(names){ const hidden=new Set(S.employees.filter(e=>e.role==='viewer').map(e=>e.name)); return (names||[]).filter(n=>!hidden.has(n)); }
 function employeeCheckGridHtml(namePrefix, selectedNames){
   selectedNames=selectedNames||[];
-  return S.employees.map(e=>`
+  return workingTeamEmployees().map(e=>`
     <label class="check-tile ${selectedNames.includes(e.name)?'on':''}" data-tile>
       <input type="checkbox" name="${namePrefix}_${e.id}" ${selectedNames.includes(e.name)?'checked':''}>
       <span class="avatar-sm">${avatarInner(e)}</span>${empTileLabel(e)}
     </label>`).join('') || '<p class="muted">لا يوجد موظفون بعد</p>';
 }
 function collectCheckedEmployeeNames(fd, namePrefix){
-  return S.employees.filter(emp=>fd.has(namePrefix+'_'+emp.id)).map(emp=>emp.name);
+  return workingTeamEmployees().filter(emp=>fd.has(namePrefix+'_'+emp.id)).map(emp=>emp.name);
 }
 function wireEmployeeCheckTiles(){
   $all('[data-tile] input[type=checkbox]').forEach(cb=>cb.addEventListener('change',()=>cb.closest('[data-tile]').classList.toggle('on',cb.checked)));
@@ -1010,7 +1015,7 @@ function topbarHtml(){
         <div class="topbar-menu" id="topMenu">
           <div style="padding:12px 14px;border-bottom:1px solid var(--line)">
             <div style="font-weight:800;font-size:13.5px">${esc(u.name)}</div>
-            <div class="muted" style="margin-top:2px">${esc(u.employeeNumber)} · ${esc(u.capacity||u.jobTitle||(u.role==='lead'?'مشرف':'عضو الفريق'))}</div>
+            <div class="muted" style="margin-top:2px">${esc(u.employeeNumber)} · ${esc(u.capacity||u.jobTitle||employeeRoleLabel(u.role))}</div>
           </div>
           ${u.role==='lead'?`
           <button data-go="portal-employees">${icon('users')} إدارة الموظفين</button>
@@ -1099,7 +1104,9 @@ function render(){
   if(!S.user){ go('landing'); return; }
 
   let inner='';
-  if(S.route==='portal-dashboard') inner=renderDashboard();
+  const viewerBlockedRoutes=new Set(['portal-request-add','portal-request-edit','portal-visit-add','portal-task-add','portal-meeting-add','portal-newsletter-add','portal-newsletter-edit','portal-employees','portal-reports','portal-trash']);
+  if(isViewer()&&viewerBlockedRoutes.has(S.route)) inner=`<div class="section"><div class="empty-state">${icon('eye')}<h3>صلاحية اطلاع فقط</h3><p>يمكن لهذا الحساب مشاهدة البيانات فقط دون إضافة أو تعديل أو حذف.</p></div></div>`;
+  else if(S.route==='portal-dashboard') inner=renderDashboard();
   else if(S.route==='portal-requests') inner=renderRequestsList();
   else if(S.route==='portal-request-add') inner=renderRequestAddInternal();
   else if(S.route==='portal-request-edit') inner=renderRequestEdit(S.routeParam);
@@ -1126,6 +1133,10 @@ function render(){
   app.innerHTML=portalShell(inner);
   wireShellEvents();
   wirePortalRoute();
+  if(isViewer()){
+    ['#internalForm','#productionForm','#attachForm','#beneficiaryForm','#visitEditForm','#taskEditForm','#meetingEditForm'].forEach(sel=>{const form=$(sel);if(form){form.querySelectorAll('input,select,textarea,button').forEach(el=>el.disabled=true);form.querySelectorAll('button[type="submit"]').forEach(el=>el.style.display='none');}});
+    ['[data-go="portal-request-add"]','[data-go="portal-visit-add"]','[data-go="portal-task-add"]','[data-go="portal-meeting-add"]','[data-go="portal-newsletter-add"]','#editReqBtn','#deleteReqBtn','#addSiteBtn','#certifyVisitBtn','#deleteVisitBtn','#certifyTaskBtn','#deleteTaskBtn','#editMeetingBtn','#deleteMeetingBtn','[data-remove-site]','[data-remove-attach]','#setReceivedTodayBtn'].forEach(sel=>$all(sel).forEach(el=>el.style.display='none'));
+  }
 }
 function wireShellEvents(){
   $all('.topbar [data-go], .bottomnav [data-go], .workspace-sidebar [data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
@@ -1877,7 +1888,7 @@ function renderRequestDetail(id){
         <div class="field">
           <label>تم إسناد مهام التصوير إلى</label>
           <div class="check-grid">
-            ${S.employees.map(e=>`
+            ${workingTeamEmployees().map(e=>`
               <label class="check-tile ${assignedPhotographers.includes(e.id)?'on':''}" data-tile>
                 <input type="checkbox" name="photog_${e.id}" ${assignedPhotographers.includes(e.id)?'checked':''}>
                 <span class="avatar-sm">${avatarInner(e)}</span>${empTileLabel(e)}
@@ -1887,7 +1898,7 @@ function renderRequestDetail(id){
         <div class="field">
           <label>تم إسناد مهام المونتاج (EDIT) إلى</label>
           <div class="check-grid">
-            ${S.employees.map(e=>`
+            ${workingTeamEmployees().map(e=>`
               <label class="check-tile ${assignedEditors.includes(e.id)?'on':''}" data-tile>
                 <input type="checkbox" name="editor_${e.id}" ${assignedEditors.includes(e.id)?'checked':''}>
                 <span class="avatar-sm">${avatarInner(e)}</span>${empTileLabel(e)}
@@ -2051,8 +2062,8 @@ function wireRequestDetail(id){
     e.preventDefault();
     const btn=e.target.querySelector('[type=submit]');
     const fd=new FormData(iform);
-    const photographers=S.employees.filter(emp=>fd.has('photog_'+emp.id)).map(emp=>emp.id);
-    const editors=S.employees.filter(emp=>fd.has('editor_'+emp.id)).map(emp=>emp.id);
+    const photographers=workingTeamEmployees().filter(emp=>fd.has('photog_'+emp.id)).map(emp=>emp.id);
+    const editors=workingTeamEmployees().filter(emp=>fd.has('editor_'+emp.id)).map(emp=>emp.id);
     const receivedDate=fd.get('receivedDate')||'';
     const oldAssigned=new Set([...(r.internal&&r.internal.assignedPhotographers||[]),...(r.internal&&r.internal.assignedEditors||[])]);
     const newlyAssigned=[...new Set([...photographers,...editors])].filter(empId=>!oldAssigned.has(empId));
@@ -2132,8 +2143,7 @@ function visitsListInnerHtml(list){
         ${v.certified===false?`<span class="badge badge-urgent">بانتظار الاعتماد</span>`:''}
       </div>
       <div class="grid-card-title">${v.date?fmtDate(v.date):'بدون تاريخ'}</div>
-      ${(v.startTime||v.endTime)?`<div class="grid-card-sub" style="font-weight:700">${icon('clock')} ${esc(v.startTime||'—')} ${v.endTime?' - '+esc(v.endTime):''}</div>`:''}
-      <div class="grid-card-sub">${esc(typesPreview||(sites[0]&&sites[0].projectName)||'')}</div>
+            <div class="grid-card-sub">${esc(typesPreview||(sites[0]&&sites[0].projectName)||'')}</div>
       ${sites.some(site=>site.startTime||site.endTime)?`<div class="grid-card-sub" style="margin-top:4px">${sites.slice(0,2).map((site,i)=>`م${i+1}: ${esc(site.startTime||'—')}${site.endTime?' - '+esc(site.endTime):''}`).join(' · ')}${sites.length>2?' · +'+(sites.length-2):''}</div>`:''}
       ${(v.conductedBy&&v.conductedBy.length)?`<div class="grid-card-sub" style="margin-top:3px">${esc(v.conductedBy.join('، '))}</div>`:''}
     </div>`;
@@ -2203,11 +2213,7 @@ function renderVisitAdd(){
   <form id="visitForm" novalidate>
     <div class="section" style="margin-bottom:14px">
       <div class="section-body">
-        <div class="row3">
-          <div class="field"><label>تاريخ الزيارة</label><input class="input" type="date" name="visitDate" value="${todayISO()}" required></div>
-          <div class="field"><label>وقت بداية الزيارة</label><input class="input" type="time" name="visitStartTime" value="${nowTimeHM()}"></div>
-          <div class="field"><label>وقت انتهاء الزيارة</label><input class="input" type="time" name="visitEndTime"></div>
-        </div>
+        <div class="field"><label>تاريخ الزيارة</label><input class="input" type="date" name="visitDate" value="${todayISO()}" required></div>
         <div class="field" style="margin-bottom:0">
           <label>من قام بالزيارة</label>
           <div class="check-grid">${employeeCheckGridHtml('cond')}</div>
@@ -2220,7 +2226,7 @@ function renderVisitAdd(){
           <label>${icon('bell')} إسناد المهمة إلى موظف <span class="muted">(اختياري — يصله إشعار داخل المنصة)</span></label>
           <select class="input" name="assignTo">
             <option value="">-- بدون إسناد --</option>
-            ${S.employees.filter(e=>e.id!==S.user.id).map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('')}
+            ${workingTeamEmployees().filter(e=>e.id!==S.user.id).map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -2276,9 +2282,6 @@ function wireVisitAdd(){
     if(missingSite){ toast('يرجى تعبئة اسم المشروع والموقع قبل الحفظ',true); return; }
     const invalidSiteTime=sites.find(x=>x.startTime&&x.endTime&&x.endTime<x.startTime);
     if(invalidSiteTime){ toast('وقت انتهاء زيارة أحد المواقع يجب أن يكون بعد وقت البداية',true); return; }
-    const visitStartTime=fd.get('visitStartTime')||'';
-    const visitEndTime=fd.get('visitEndTime')||'';
-    if(visitStartTime&&visitEndTime&&visitEndTime<visitStartTime){ toast('وقت انتهاء الزيارة يجب أن يكون بعد وقت البداية',true); return; }
     const assignTo=fd.get('assignTo')||'';
     const assignedEmp=assignTo?S.employees.find(x=>x.id===assignTo):null;
     /* المهمة المسندة تُحتسب من ضمن أعمال الموظف المكلّف بها، وليست ضمن أعمال المشرف المُسنِد،
@@ -2287,7 +2290,7 @@ function wireVisitAdd(){
     setLoading(btn,true);
     try{
       const newVisitRef=await addDoc(collection(db,'visits'),{
-        date:visitDate, startTime:visitStartTime, endTime:visitEndTime, sites, conductedBy, certified:S.user.role==='lead', createdBy:S.user.name, createdAt:serverTimestamp()
+        date:visitDate, sites, conductedBy, certified:S.user.role==='lead', createdBy:S.user.name, createdAt:serverTimestamp()
       });
       if(assignedEmp){
         await createNotification(assignTo, `تم إسناد مهمة زيارة لك بتاريخ ${fmtDateShort(visitDate)}${visitStartTime?' الساعة '+visitStartTime:''}، يجب الاطلاع عليها من خلال المنصة`, 'portal-visit-detail', newVisitRef.id);
@@ -2370,11 +2373,7 @@ function renderVisitDetail(id){
   <form id="visitEditForm" novalidate>
     <div class="section" style="margin-bottom:14px">
       <div class="section-body">
-        <div class="row3">
-          <div class="field"><label>تاريخ الزيارة</label><input class="input" type="date" name="visitDate" value="${esc(v.date||'')}"></div>
-          <div class="field"><label>وقت بداية الزيارة</label><input class="input" type="time" name="visitStartTime" value="${esc(v.startTime||'')}"></div>
-          <div class="field"><label>وقت انتهاء الزيارة</label><input class="input" type="time" name="visitEndTime" value="${esc(v.endTime||'')}"></div>
-        </div>
+        <div class="field"><label>تاريخ الزيارة</label><input class="input" type="date" name="visitDate" value="${esc(v.date||'')}"></div>
         <div class="field" style="margin-bottom:0">
           <label>من قام بالزيارة</label>
           <div class="check-grid">${employeeCheckGridHtml('cond', v.conductedBy)}</div>
@@ -2451,14 +2450,11 @@ function wireVisitDetail(id){
     if(missingSite){ toast('يرجى تعبئة اسم المشروع والموقع قبل الحفظ',true); return; }
     const invalidSiteTime=sites.find(x=>x.startTime&&x.endTime&&x.endTime<x.startTime);
     if(invalidSiteTime){ toast('وقت انتهاء زيارة أحد المواقع يجب أن يكون بعد وقت البداية',true); return; }
-    const visitStartTime=fd.get('visitStartTime')||'';
-    const visitEndTime=fd.get('visitEndTime')||'';
-    if(visitStartTime&&visitEndTime&&visitEndTime<visitStartTime){ toast('وقت انتهاء الزيارة يجب أن يكون بعد وقت البداية',true); return; }
     setLoading(btn,true);
     try{
-      await updateDoc(doc(db,'visits',id),{date:visitDate, startTime:visitStartTime, endTime:visitEndTime, sites, conductedBy, updatedAt:serverTimestamp()});
+      await updateDoc(doc(db,'visits',id),{date:visitDate, startTime:'', endTime:'', sites, conductedBy, updatedAt:serverTimestamp()});
       const localVisit=S.visits.find(x=>x.id===id);
-      if(localVisit){ localVisit.date=visitDate; localVisit.startTime=visitStartTime; localVisit.endTime=visitEndTime; localVisit.sites=sites; localVisit.conductedBy=conductedBy; }
+      if(localVisit){ localVisit.date=visitDate; localVisit.startTime=''; localVisit.endTime=''; localVisit.sites=sites; localVisit.conductedBy=conductedBy; }
       toast('تم حفظ التعديلات بنجاح');
       if(visitDate) S.filters.visitsMonth=monthKey(visitDate);
       go('portal-visits');
@@ -3146,7 +3142,7 @@ function renderMeetingAdd(){
       <div class="field">
         <label>الحضور من الفريق</label>
         <div class="check-grid">
-          ${S.employees.map(e=>`<label class="check-tile" data-tile><input type="checkbox" name="att_${e.id}"><span class="avatar-sm">${avatarInner(e)}</span>${empTileLabel(e)}</label>`).join('')||'<p class="muted">لا يوجد موظفون بعد</p>'}
+          ${workingTeamEmployees().map(e=>`<label class="check-tile" data-tile><input type="checkbox" name="att_${e.id}"><span class="avatar-sm">${avatarInner(e)}</span>${empTileLabel(e)}</label>`).join('')||'<p class="muted">لا يوجد موظفون بعد</p>'}
         </div>
       </div>
       <div class="field"><label>حضور إضافي (خارج الفريق)</label><input class="input" name="extraAttendees" placeholder="أسماء مفصولة بفاصلة"></div>
@@ -3164,7 +3160,7 @@ function wireMeetingAdd(){
     e.preventDefault();
     const btn=e.target.querySelector('[type=submit]');
     const fd=new FormData(e.target);
-    const attendees=S.employees.filter(emp=>fd.has('att_'+emp.id)).map(emp=>emp.id);
+    const attendees=workingTeamEmployees().filter(emp=>fd.has('att_'+emp.id)).map(emp=>emp.id);
     const startTime=fd.get('startTime')||'', endTime=fd.get('endTime')||'';
     if(startTime&&endTime&&endTime<startTime){ toast('وقت انتهاء الاجتماع يجب أن يكون بعد وقت البداية',true); return; }
     const dateEl=e.target.querySelector('[name=date]');
@@ -3213,7 +3209,7 @@ function renderMeetingDetail(id){
       <div class="field">
         <label>الحضور من الفريق</label>
         <div class="check-grid">
-          ${S.employees.map(e=>`<label class="check-tile ${(m.attendees||[]).includes(e.id)?'on':''}" data-tile><input type="checkbox" name="att_${e.id}" ${(m.attendees||[]).includes(e.id)?'checked':''}><span class="avatar-sm">${avatarInner(e)}</span>${empTileLabel(e)}</label>`).join('')||'<p class="muted">لا يوجد موظفون بعد</p>'}
+          ${workingTeamEmployees().map(e=>`<label class="check-tile ${(m.attendees||[]).includes(e.id)?'on':''}" data-tile><input type="checkbox" name="att_${e.id}" ${(m.attendees||[]).includes(e.id)?'checked':''}><span class="avatar-sm">${avatarInner(e)}</span>${empTileLabel(e)}</label>`).join('')||'<p class="muted">لا يوجد موظفون بعد</p>'}
         </div>
       </div>
       <div class="field"><label>حضور إضافي (خارج الفريق)</label><input class="input" name="extraAttendees" value="${esc(m.extraAttendees||'')}" placeholder="أسماء مفصولة بفاصلة"></div>
@@ -3266,7 +3262,7 @@ function wireMeetingDetail(id){
     e.preventDefault();
     const btn=e.target.querySelector('[type=submit]');
     const fd=new FormData(e.target);
-    const attendees=S.employees.filter(emp=>fd.has('att_'+emp.id)).map(emp=>emp.id);
+    const attendees=workingTeamEmployees().filter(emp=>fd.has('att_'+emp.id)).map(emp=>emp.id);
     /* قراءة التاريخ مباشرة من عنصر الإدخال كإجراء احترازي إضافي، بدل الاعتماد حصراً على FormData */
     const dateEl=e.target.querySelector('[name=date]');
     const newTitle=(fd.get('title')||'').trim();
@@ -3314,7 +3310,7 @@ function renderEmployees(){
         <div class="list-item-body">
           <div class="list-item-title">${esc(e.name)} ${e.active===false?'<span class="muted">(معطّل)</span>':''}</div>
           <div class="list-item-sub">
-            <span class="badge badge-role-${e.role}">${e.role==='lead'?'مشرف':'عضو الفريق'}</span>
+            <span class="badge badge-role-${e.role}">${employeeRoleLabel(e.role)}</span>
             <span>${esc(e.employeeNumber)}</span>
             ${e.jobTitle?`<span>· ${esc(e.jobTitle)}</span>`:''}
             ${e.capacity?`<span>· ${esc(e.capacity)}</span>`:''}
@@ -3347,6 +3343,7 @@ function addEmployeeModalHtml(){
           <div class="radio-row">
             <button type="button" class="radio-pill on" data-role="member">عضو فريق</button>
             <button type="button" class="radio-pill" data-role="lead">مشرف</button>
+            <button type="button" class="radio-pill" data-role="viewer">اطلاع فقط</button>
           </div>
           <input type="hidden" name="role" value="member">
         </div>
@@ -3375,10 +3372,11 @@ function editEmployeeModalHtml(emp){
         <div class="field">
           <label>الصلاحية</label>
           <div class="radio-row">
-            <button type="button" class="radio-pill ${emp.role!=='lead'?'on':''}" data-erole="member">عضو فريق</button>
+            <button type="button" class="radio-pill ${(!emp.role||emp.role==='member')?'on':''}" data-erole="member">عضو فريق</button>
             <button type="button" class="radio-pill ${emp.role==='lead'?'on':''}" data-erole="lead">مشرف</button>
+            <button type="button" class="radio-pill ${emp.role==='viewer'?'on':''}" data-erole="viewer">اطلاع فقط</button>
           </div>
-          <input type="hidden" name="role" value="${emp.role==='lead'?'lead':'member'}">
+          <input type="hidden" name="role" value="${emp.role||'member'}">
         </div>
         <button class="btn btn-primary btn-block" type="submit" id="editEmpSubmitBtn" style="margin-top:6px">${icon('check')} حفظ التعديلات</button>
       </form>
@@ -3558,7 +3556,7 @@ function computeReportStats(start,end){
     totalSiteVisits++;
     byTaskType[s.taskType]=(byTaskType[s.taskType]||0)+1;
   }));
-  const perEmp=S.employees.map(e=>{
+  const perEmp=workingTeamEmployees().map(e=>{
     const asPhotog=reqInPeriod.filter(r=>r.internal&&r.internal.assignedPhotographers&&r.internal.assignedPhotographers.includes(e.id)).length;
     const asEditor=reqInPeriod.filter(r=>r.internal&&r.internal.assignedEditors&&r.internal.assignedEditors.includes(e.id)).length;
     /* الزيارة تُحتسب لمن قام بها فعلياً (conductedBy)؛ ولا يُحتسب المُسجِّل (createdBy) إلا إذا كانت القائمة فارغة (بيانات قديمة مستوردة بلا تحديد) */
@@ -3634,6 +3632,7 @@ function periodPickerHtml(){
   </div>`;
 }
 function employeeDetailReportHtml(emp, period){
+  if(!emp||emp.role==='viewer') return '<div class="empty-state"><h3>هذا الحساب مستبعد من تقارير الفريق</h3></div>';
   const d=computeEmployeeDetail(emp.id, emp.name, period.start, period.end);
   const totalItems=d.reqAsPhotog.length+d.reqAsEditor.length+d.visitsConducted.length+d.meetingsAttended.length+d.tasksResponsible.length;
   const reqMap=new Map();
@@ -3682,7 +3681,7 @@ function employeeDetailReportHtml(emp, period){
           <div class="list-item-icon">${icon('pin')}</div>
           <div class="list-item-body">
             <div class="list-item-title">${v.date?fmtDate(v.date):'بدون تاريخ'}</div>
-            <div class="list-item-sub">${(v.startTime||v.endTime)?esc(v.startTime||'—')+(v.endTime?' - '+esc(v.endTime):'')+' · ':''}${(v.sites||[]).map(s=>esc(s.projectName)).join('، ')}</div>
+            <div class="list-item-sub">${(v.sites||[]).map(site=>esc(site.projectName||'موقع')+((site.startTime||site.endTime)?' ('+esc(site.startTime||'—')+(site.endTime?' - '+esc(site.endTime):'')+')':'')).join('، ')}</div>
           </div>
           <div class="list-item-chev">${icon('chev')}</div>
         </div>`).join('')}
@@ -3720,7 +3719,7 @@ function productionStageLabel(s){
   return {not_started:'لم يبدأ الإنتاج',shooting:'جاري التصوير',editing:'المونتاج والتحرير',review:'المراجعة النهائية',ready:'جاهز للتسليم',delivered:'تم التسليم'}[s]||'لم يبدأ الإنتاج';
 }
 function empNamesFromIds(ids){
-  return (ids||[]).map(id=>S.employees.find(e=>e.id===id)?.name||id).filter(Boolean);
+  return (ids||[]).map(id=>S.employees.find(e=>e.id===id)).filter(e=>e&&e.role!=='viewer').map(e=>e.name).filter(Boolean);
 }
 function subjectReportBounds(){
   const fallback=reportPeriodBounds(S.filters.reportType,S.filters.reportValue);
@@ -3740,7 +3739,7 @@ function subjectReportItems(){
     if(match(text)) items.push({kind:'request',date:requestDueDate(r),title:r.event?.name||'طلب تصوير',data:r});
   });
   S.visits.filter(v=>!v.deleted&&inRange(v.date)).forEach(v=>{
-    const text=[v.date,...(v.sites||[]).flatMap(x=>[x.projectName,x.location,x.description,x.taskType]),...(v.conductedBy||[])].join(' ');
+    const text=[v.date,...(v.sites||[]).flatMap(x=>[x.projectName,x.location,x.description,x.taskType]),...reportableNames(v.conductedBy)].join(' ');
     if(match(text)) items.push({kind:'visit',date:v.date,title:(v.sites||[]).map(x=>x.projectName).filter(Boolean).join('، ')||'زيارة ميدانية',data:v});
   });
   S.meetings.filter(m=>!m.deleted&&inRange(m.date)).forEach(m=>{
@@ -3748,7 +3747,7 @@ function subjectReportItems(){
     if(match(text)) items.push({kind:'meeting',date:m.date,title:m.title||'اجتماع',data:m});
   });
   S.tasks.filter(t=>!t.deleted&&inRange(t.startDate||t.endDate)).forEach(t=>{
-    const text=[t.title,t.notes,...(t.responsible||[])].join(' ');
+    const text=[t.title,t.notes,...reportableNames(t.responsible)].join(' ');
     if(match(text)) items.push({kind:'task',date:t.startDate||t.endDate||'',title:t.title||'مهمة',data:t});
   });
   return items.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
@@ -3764,9 +3763,9 @@ function detailedSubjectReportHtml(){
   const title=(S.filters.subjectQuery||'').trim()||'جميع الموضوعات';
   let sections='';
   if(requestItems.length){ const rows=requestItems.map((item,i)=>{const r=item.data;return [i+1,r.requestNumber||'',r.event?.name||item.title||'',r.event?.date||item.date||'',r.requester?.directorate||'',r.event?.location||'',{text:statusLabel(r.status),statusClass:reportStatusClass(statusLabel(r.status))},priorityLabel(r.priority),empNamesFromIds(r.internal?.assignedPhotographers).join('، '),empNamesFromIds(r.internal?.assignedEditors).join('، '),productionStageLabel(r.production?.stage),r.internal?.teamNotes||r.production?.notes||''];}); sections+=reportSheetHtml('طلبات التصوير المرتبطة بالموضوع',`${start} إلى ${end}`,['م','رقم الطلب','الموضوع','التاريخ','الجهة','الموقع','الحالة','الأولوية','التصوير','المونتاج','مرحلة الإنتاج','الملاحظات'],rows); }
-  if(visitItems.length){ const rows=[];let n=1;visitItems.forEach(item=>{const v=item.data;(v.sites&&v.sites.length?v.sites:[{}]).forEach(site=>rows.push([n++,v.date||item.date||'',site.projectName||item.title||'',site.location||'',site.taskType||'',site.startTime||v.startTime||'',site.endTime||v.endTime||'',(v.conductedBy||[]).join('، '),site.description||'']));}); sections+=reportSheetHtml('الزيارات المرتبطة بالموضوع',`${start} إلى ${end}`,['م','تاريخ الزيارة','اسم المشروع / الموقع','الموقع','نوع المهمة','وقت البداية','وقت الانتهاء','من قام بالزيارة','الوصف / الملاحظات'],rows); }
+  if(visitItems.length){ const rows=[];let n=1;visitItems.forEach(item=>{const v=item.data;(v.sites&&v.sites.length?v.sites:[{}]).forEach(site=>rows.push([n++,v.date||item.date||'',site.projectName||item.title||'',site.location||'',site.taskType||'',site.startTime||'',site.endTime||'',reportableNames(v.conductedBy).join('، '),site.description||'']));}); sections+=reportSheetHtml('الزيارات المرتبطة بالموضوع',`${start} إلى ${end}`,['م','تاريخ الزيارة','اسم المشروع / الموقع','الموقع','نوع المهمة','وقت البداية','وقت الانتهاء','من قام بالزيارة','الوصف / الملاحظات'],rows); }
   if(meetingItems.length){ const rows=meetingItems.map((item,i)=>{const m=item.data;return [i+1,m.title||item.title||'',m.date||item.date||'',m.startTime||'',m.endTime||'',m.location||'',empNamesFromIds(m.attendees).join('، '),m.agenda||'',m.notes||''];}); sections+=reportSheetHtml('الاجتماعات المرتبطة بالموضوع',`${start} إلى ${end}`,['م','عنوان الاجتماع','التاريخ','وقت البداية','وقت الانتهاء','المكان','الحضور','جدول الأعمال','الملاحظات / المحضر'],rows); }
-  if(taskItems.length){ const rows=taskItems.map((item,i)=>{const t=item.data;return [i+1,t.title||item.title||'',t.startDate||item.date||'',t.endDate||'',(t.responsible||[]).join('، '),{text:taskStatusLabel(t.status),statusClass:reportStatusClass(taskStatusLabel(t.status))},t.notes||''];}); sections+=reportSheetHtml('جدول الأعمال المرتبط بالموضوع',`${start} إلى ${end}`,['م','الموضوع / المشروع','تاريخ البدء','تاريخ الانتهاء','المسؤول','الحالة','التحديات / الملاحظات'],rows); }
+  if(taskItems.length){ const rows=taskItems.map((item,i)=>{const t=item.data;return [i+1,t.title||item.title||'',t.startDate||item.date||'',t.endDate||'',reportableNames(t.responsible).join('، '),{text:taskStatusLabel(t.status),statusClass:reportStatusClass(taskStatusLabel(t.status))},t.notes||''];}); sections+=reportSheetHtml('جدول الأعمال المرتبط بالموضوع',`${start} إلى ${end}`,['م','الموضوع / المشروع','تاريخ البدء','تاريخ الانتهاء','المسؤول','الحالة','التحديات / الملاحظات'],rows); }
   return `<section class="report-sheet" style="border-color:var(--gold-500)"><div class="report-sheet-head"><h3>${icon('search')} تقرير حالة موضوع: ${esc(title)}</h3><span>${esc(start)} إلى ${esc(end)}</span></div><div class="section-body"><div class="report-summary-strip" style="margin-bottom:0"><div class="report-summary-item"><strong>${items.length}</strong><span>إجمالي السجلات المرتبطة</span></div><div class="report-summary-item"><strong>${requestItems.length}</strong><span>طلبات تصوير</span></div><div class="report-summary-item"><strong>${visitItems.length}</strong><span>زيارات</span></div><div class="report-summary-item"><strong>${meetingItems.length+taskItems.length}</strong><span>اجتماعات وأعمال</span></div></div></div></section>${sections||'<div class="report-sheet"><div class="section-body"><div class="empty-state"><h3>لا توجد بيانات مطابقة للموضوع خلال الفترة المحددة</h3></div></div></div>'}`;
 }
 
@@ -3793,12 +3792,12 @@ function reportSheetHtml(title,subtitle,headers,rows){
   return `<section class="report-sheet"><div class="report-sheet-head"><h3>${esc(title)}</h3><span>${esc(subtitle||'')}</span></div><div class="report-table-wrap"><table class="report-table"><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.map(row=>`<tr>${row.map((c,i)=>`<td class="${i===0?'num-cell ':''}${c&&c.statusClass?c.statusClass:''}">${c&&typeof c==='object'?esc(c.text||''):esc(c==null?'':String(c))}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${headers.length}" style="text-align:center;padding:24px;color:#71877d">لا توجد بيانات خلال الفترة المحددة</td></tr>`}</tbody></table></div></section>`;
 }
 function tasksStructuredReport(data){
-  const rows=data.tasks.slice().sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||'')).map((t,i)=>[i+1,t.title||'',t.startDate||'',t.endDate||'',(t.responsible||[]).join('، '),{text:taskStatusLabel(t.status),statusClass:reportStatusClass(taskStatusLabel(t.status))},t.notes||'']);
+  const rows=data.tasks.slice().sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||'')).map((t,i)=>[i+1,t.title||'',t.startDate||'',t.endDate||'',reportableNames(t.responsible).join('، '),{text:taskStatusLabel(t.status),statusClass:reportStatusClass(taskStatusLabel(t.status))},t.notes||'']);
   return reportSheetHtml('جدول الأعمال',data.period.label,['م','الموضوع / المشروع','تاريخ البدء','تاريخ الانتهاء','المسؤول','الحالة','التحديات / الملاحظات'],rows);
 }
 function visitsStructuredReport(data){
   const rows=[]; let n=1;
-  data.visits.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).forEach(v=>{const sites=(v.sites&&v.sites.length)?v.sites:[{}];sites.forEach(site=>rows.push([n++,v.date||'',site.projectName||'',site.location||'',site.taskType||'',site.startTime||v.startTime||'',site.endTime||v.endTime||'',(v.conductedBy||[]).join('، '),site.description||'']));});
+  data.visits.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).forEach(v=>{const sites=(v.sites&&v.sites.length)?v.sites:[{}];sites.forEach(site=>rows.push([n++,v.date||'',site.projectName||'',site.location||'',site.taskType||'',site.startTime||'',site.endTime||'',reportableNames(v.conductedBy).join('، '),site.description||'']));});
   return reportSheetHtml('جدول الزيارات',data.period.label,['م','تاريخ الزيارة','اسم المشروع / الموقع','الموقع','نوع المهمة','وقت البداية','وقت الانتهاء','من قام بالزيارة','الوصف / الملاحظات'],rows);
 }
 function requestsStructuredReport(data){
@@ -3832,7 +3831,7 @@ function renderReports(){
   const types=[['all','الكل'],['tasks','جدول الأعمال'],['visits','الزيارات'],['requests','طلبات التصوير'],['meetings','الاجتماعات'],['performance','أداء الموظفين']];
   return `<div class="section-title-row no-print"><div><h2>التقارير والأداء</h2><p class="muted" style="margin-top:4px">اختر نوع التقرير والفترة ثم استخرجه بصيغة PDF أو Excel</p></div><div style="display:flex;gap:8px"><button class="btn btn-outline btn-sm" id="exportExcelBtn">${icon('doc')} Excel</button><button class="btn btn-outline btn-sm" id="printReportBtn">${icon('doc')} PDF</button></div></div>
   <div class="section no-print" style="margin-bottom:14px"><div class="section-body"><div class="field"><label>نوع التقرير المطلوب</label><div class="report-selector">${types.map(([k,l])=>`<button type="button" class="chip ${S.filters.reportContentType===k?'on':''}" data-report-content="${k}">${l}</button>`).join('')}</div></div><div class="chiprow" id="reportTypeChiprow"><button class="chip ${S.filters.reportType==='month'?'on':''}" data-rtype="month">شهري</button><button class="chip ${S.filters.reportType==='quarter'?'on':''}" data-rtype="quarter">ربع سنوي</button><button class="chip ${S.filters.reportType==='year'?'on':''}" data-rtype="year">سنوي</button></div>${periodPickerHtml()}</div></div>
-  ${S.filters.reportContentType==='performance'||S.filters.reportContentType==='all'?`<div class="section no-print" style="margin-bottom:14px"><div class="section-body"><div class="field" style="margin-bottom:0"><label>${icon('search')} تقرير موظف محدد (اختياري)</label><select class="input" id="empSelectDropdown"><option value="">-- جميع الموظفين --</option>${S.employees.map(e=>`<option value="${e.id}" ${S.filters.reportSelectedEmpId===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}</select></div></div></div>`:''}
+  ${S.filters.reportContentType==='performance'||S.filters.reportContentType==='all'?`<div class="section no-print" style="margin-bottom:14px"><div class="section-body"><div class="field" style="margin-bottom:0"><label>${icon('search')} تقرير موظف محدد (اختياري)</label><select class="input" id="empSelectDropdown"><option value="">-- جميع الموظفين --</option>${workingTeamEmployees().map(e=>`<option value="${e.id}" ${S.filters.reportSelectedEmpId===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}</select></div></div></div>`:''}
   <div class="section no-print" style="margin-bottom:14px"><div class="section-head">${icon('search')} تقرير حالة موضوع خلال فترة</div><div class="section-body"><div class="row2"><div class="field"><label>من تاريخ</label><input class="input" type="date" id="subjectFromInput" value="${esc(S.filters.subjectFrom||reportPeriodBounds(S.filters.reportType,S.filters.reportValue).start)}"></div><div class="field"><label>إلى تاريخ</label><input class="input" type="date" id="subjectToInput" value="${esc(S.filters.subjectTo||reportPeriodBounds(S.filters.reportType,S.filters.reportValue).end)}"></div></div><div class="field"><label>اسم الموضوع / المشروع / رقم الطلب</label><input class="input" id="subjectQueryInput" value="${esc(S.filters.subjectQuery||'')}" placeholder="اكتب اسم الموضوع أو المشروع"></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-primary" id="applySubjectReportBtn">${icon('search')} إضافة التفاصيل للتقرير</button>${S.filters.subjectReportEnabled?'<button type="button" class="btn btn-ghost" id="clearSubjectReportBtn">إلغاء التفاصيل</button>':''}</div></div></div>
   <div id="reportBody">${reportBodyHtml()}</div>`;
 }
@@ -3954,9 +3953,9 @@ function appendSubjectSheetToWorkbook(XLSX,wb){
   const addSheet=(name,headers,rows,widths)=>{const aoa=[['تقرير حالة موضوع'],['الموضوع',title],['الفترة',start,'إلى',end],[],headers,...rows];const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=widths.map(w=>({wch:w}));ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:Math.max(0,headers.length-1)}}];styleExcelWorksheet(ws,XLSX,4);XLSX.utils.book_append_sheet(wb,ws,name.slice(0,31));};
   addSheet('حالة الموضوع',['البيان','القيمة'],[['الموضوع',title],['من تاريخ',start],['إلى تاريخ',end],['إجمالي السجلات',items.length],['طلبات التصوير',requestItems.length],['الزيارات',visitItems.length],['الاجتماعات',meetingItems.length],['جدول الأعمال',taskItems.length]],[24,42]);
   if(requestItems.length) addSheet('الموضوع-طلبات',['م','رقم الطلب','الموضوع','التاريخ','الجهة','الموقع','الحالة','الأولوية','التصوير','المونتاج','مرحلة الإنتاج','الملاحظات'],requestItems.map((item,i)=>{const r=item.data;return [i+1,r.requestNumber||'',r.event?.name||item.title||'',r.event?.date||item.date||'',r.requester?.directorate||'',r.event?.location||'',statusLabel(r.status),priorityLabel(r.priority),empNamesFromIds(r.internal?.assignedPhotographers).join('، '),empNamesFromIds(r.internal?.assignedEditors).join('، '),productionStageLabel(r.production?.stage),r.internal?.teamNotes||r.production?.notes||''];}),[6,15,34,14,24,24,16,14,24,24,18,45]);
-  if(visitItems.length){const rows=[];let n=1;visitItems.forEach(item=>{const v=item.data;(v.sites&&v.sites.length?v.sites:[{}]).forEach(site=>rows.push([n++,v.date||item.date||'',site.projectName||item.title||'',site.location||'',site.taskType||'',site.startTime||v.startTime||'',site.endTime||v.endTime||'',(v.conductedBy||[]).join('، '),site.description||'']));});addSheet('الموضوع-زيارات',['م','تاريخ الزيارة','اسم المشروع / الموقع','الموقع','نوع المهمة','وقت البداية','وقت الانتهاء','من قام بالزيارة','الوصف / الملاحظات'],rows,[6,14,34,22,20,12,12,28,48]);}
+  if(visitItems.length){const rows=[];let n=1;visitItems.forEach(item=>{const v=item.data;(v.sites&&v.sites.length?v.sites:[{}]).forEach(site=>rows.push([n++,v.date||item.date||'',site.projectName||item.title||'',site.location||'',site.taskType||'',site.startTime||'',site.endTime||'',reportableNames(v.conductedBy).join('، '),site.description||'']));});addSheet('الموضوع-زيارات',['م','تاريخ الزيارة','اسم المشروع / الموقع','الموقع','نوع المهمة','وقت البداية','وقت الانتهاء','من قام بالزيارة','الوصف / الملاحظات'],rows,[6,14,34,22,20,12,12,28,48]);}
   if(meetingItems.length) addSheet('الموضوع-اجتماعات',['م','عنوان الاجتماع','التاريخ','وقت البداية','وقت الانتهاء','المكان','الحضور','جدول الأعمال','الملاحظات / المحضر'],meetingItems.map((item,i)=>{const m=item.data;return [i+1,m.title||item.title||'',m.date||item.date||'',m.startTime||'',m.endTime||'',m.location||'',empNamesFromIds(m.attendees).join('، '),m.agenda||'',m.notes||''];}),[6,34,14,12,12,24,30,45,45]);
-  if(taskItems.length) addSheet('الموضوع-أعمال',['م','الموضوع / المشروع','تاريخ البدء','تاريخ الانتهاء','المسؤول','الحالة','التحديات / الملاحظات'],taskItems.map((item,i)=>{const t=item.data;return [i+1,t.title||item.title||'',t.startDate||item.date||'',t.endDate||'',(t.responsible||[]).join('، '),taskStatusLabel(t.status),t.notes||''];}),[6,38,14,14,28,16,50]);
+  if(taskItems.length) addSheet('الموضوع-أعمال',['م','الموضوع / المشروع','تاريخ البدء','تاريخ الانتهاء','المسؤول','الحالة','التحديات / الملاحظات'],taskItems.map((item,i)=>{const t=item.data;return [i+1,t.title||item.title||'',t.startDate||item.date||'',t.endDate||'',reportableNames(t.responsible).join('، '),taskStatusLabel(t.status),t.notes||''];}),[6,38,14,14,28,16,50]);
 }
 
 async function exportReportToExcel(){
@@ -3964,8 +3963,8 @@ async function exportReportToExcel(){
   try{
     const XLSX=await ensureXLSXLoaded(),data=reportPeriodData(),wb=XLSX.utils.book_new(),selected=selectedReportContentType(); wb.Workbook=wb.Workbook||{}; wb.Workbook.Views=[{RTL:true}];
     const add=(name,headers,rows,widths)=>{const aoa=[[`تقرير فريق التصوير - ${name}`],[`الفترة: ${data.period.label}`],[],headers,...rows];const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=widths.map(w=>({wch:w}));ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:Math.max(0,headers.length-1)}},{s:{r:1,c:0},e:{r:1,c:Math.max(0,headers.length-1)}}];styleExcelWorksheet(ws,XLSX,3);XLSX.utils.book_append_sheet(wb,ws,name.slice(0,28));};
-    if(selected==='all'||selected==='tasks') add('جدول الأعمال',['م','الموضوع / المشروع','تاريخ البدء','تاريخ الانتهاء','المسؤول','الحالة','التحديات / الملاحظات'],data.tasks.map((t,i)=>[i+1,t.title||'',t.startDate||'',t.endDate||'',(t.responsible||[]).join('، '),taskStatusLabel(t.status),t.notes||'']),[6,38,14,14,28,16,50]);
-    if(selected==='all'||selected==='visits'){const rows=[];let i=1;data.visits.forEach(v=>(v.sites||[{}]).forEach(site=>rows.push([i++,v.date||'',site.projectName||'',site.location||'',site.taskType||'',site.startTime||v.startTime||'',site.endTime||v.endTime||'',(v.conductedBy||[]).join('، '),site.description||''])));add('جدول الزيارات',['م','تاريخ الزيارة','اسم المشروع / الموقع','الموقع','نوع المهمة','وقت البداية','وقت الانتهاء','من قام بالزيارة','الوصف / الملاحظات'],rows,[6,14,34,20,20,12,12,28,48]);}
+    if(selected==='all'||selected==='tasks') add('جدول الأعمال',['م','الموضوع / المشروع','تاريخ البدء','تاريخ الانتهاء','المسؤول','الحالة','التحديات / الملاحظات'],data.tasks.map((t,i)=>[i+1,t.title||'',t.startDate||'',t.endDate||'',reportableNames(t.responsible).join('، '),taskStatusLabel(t.status),t.notes||'']),[6,38,14,14,28,16,50]);
+    if(selected==='all'||selected==='visits'){const rows=[];let i=1;data.visits.forEach(v=>(v.sites||[{}]).forEach(site=>rows.push([i++,v.date||'',site.projectName||'',site.location||'',site.taskType||'',site.startTime||'',site.endTime||'',reportableNames(v.conductedBy).join('، '),site.description||''])));add('جدول الزيارات',['م','تاريخ الزيارة','اسم المشروع / الموقع','الموقع','نوع المهمة','وقت البداية','وقت الانتهاء','من قام بالزيارة','الوصف / الملاحظات'],rows,[6,14,34,20,20,12,12,28,48]);}
     if(selected==='all'||selected==='requests') add('طلبات التصوير',['م','رقم الطلب','الموضوع','التاريخ','الجهة','الموقع','الحالة','الأولوية','التصوير','المونتاج','الملاحظات'],data.requests.map((r,i)=>[i+1,r.requestNumber||'',r.event?.name||'',r.event?.date||'',r.requester?.directorate||'',r.event?.location||'',statusLabel(r.status),priorityLabel(r.priority),empNamesFromIds(r.internal?.assignedPhotographers).join('، '),empNamesFromIds(r.internal?.assignedEditors).join('، '),r.internal?.teamNotes||r.production?.notes||'']),[6,14,34,14,24,24,16,14,24,24,45]);
     if(selected==='all'||selected==='meetings') add('الاجتماعات',['م','عنوان الاجتماع','التاريخ','وقت البداية','وقت الانتهاء','المكان','الحضور','جدول الأعمال','الملاحظات / المحضر'],data.meetings.map((m,i)=>[i+1,m.title||'',m.date||'',m.startTime||'',m.endTime||'',m.location||'',empNamesFromIds(m.attendees).join('، '),m.agenda||'',m.notes||'']),[6,34,14,12,12,24,30,45,45]);
     if(selected==='all'||selected==='performance'){const st=computeReportStats(data.period.start,data.period.end);add('أداء الموظفين',['م','الموظف','طلبات تصوير','مونتاج','زيارات','اجتماعات','الإجمالي'],st.perEmp.map((r,i)=>[i+1,r.emp.name,r.asPhotog,r.asEditor,r.visitsLogged,r.meetingsAttended,r.total]),[6,30,14,14,12,12,12]);}
