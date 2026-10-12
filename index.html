@@ -3571,7 +3571,7 @@ function computeEmployeeDetail(empId,empName,start,end){
   const reqAsEditor=S.requests.filter(r=>!r.deleted&&r.internal&&r.internal.assignedEditors&&r.internal.assignedEditors.includes(empId)&&r.event&&r.event.date>=start&&r.event.date<=end);
   const visitsConducted=S.visits.filter(v=>v.certified!==false&&((v.conductedBy&&v.conductedBy.length)?v.conductedBy.includes(empName):v.createdBy===empName)&&v.date&&v.date>=start&&v.date<=end);
   const meetingsAttended=S.meetings.filter(m=>m.attendees&&m.attendees.includes(empId)&&m.date>=start&&m.date<=end);
-  const tasksResponsible=S.tasks.filter(t=>!t.deleted&&t.certified!==false&&t.responsible&&t.responsible.includes(empName)&&t.startDate&&t.startDate>=start&&t.startDate<=end);
+  const tasksResponsible=S.tasks.filter(t=>t.certified!==false&&t.responsible&&t.responsible.includes(empName)&&taskAppearsInReportPeriod(t,start,end));
   return {reqAsPhotog,reqAsEditor,visitsConducted,meetingsAttended,tasksResponsible};
 }
 function barChartHtml(rows){
@@ -3771,6 +3771,19 @@ function detailedSubjectReportHtml(){
 
 
 function selectedReportContentType(){ return S.filters.reportContentType||'all'; }
+function taskAppearsInReportPeriod(t,start,end){
+  if(!t||t.deleted||!t.startDate) return false;
+  if(t.startDate>end) return false;
+  if(t.endDate) return t.endDate>=start;
+  if(t.status==='completed') return t.startDate>=start&&t.startDate<=end;
+  return true;
+}
+function taskReportStatusLabel(t,period){
+  if(!t) return '';
+  if(t.endDate&&t.endDate>=period.start&&t.endDate<=period.end) return 'تم الانتهاء';
+  if(t.startDate&&t.startDate<=period.end&&(!t.endDate||t.endDate>period.end)) return 'جاري العمل';
+  return taskStatusLabel(t.status);
+}
 function reportPeriodData(){
   const p=reportPeriodBounds(S.filters.reportType,S.filters.reportValue);
   return {
@@ -3778,7 +3791,7 @@ function reportPeriodData(){
     requests:S.requests.filter(r=>!r.deleted&&r.event&&r.event.date&&r.event.date>=p.start&&r.event.date<=p.end),
     visits:S.visits.filter(v=>v.certified!==false&&v.date&&v.date>=p.start&&v.date<=p.end),
     meetings:S.meetings.filter(m=>!m.deleted&&m.date&&m.date>=p.start&&m.date<=p.end),
-    tasks:S.tasks.filter(t=>!t.deleted&&t.startDate&&t.startDate>=p.start&&t.startDate<=p.end)
+    tasks:S.tasks.filter(t=>taskAppearsInReportPeriod(t,p.start,p.end))
   };
 }
 function reportStatusClass(label){
@@ -3792,7 +3805,7 @@ function reportSheetHtml(title,subtitle,headers,rows){
   return `<section class="report-sheet"><div class="report-sheet-head"><h3>${esc(title)}</h3><span>${esc(subtitle||'')}</span></div><div class="report-table-wrap"><table class="report-table"><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.map(row=>`<tr>${row.map((c,i)=>`<td class="${i===0?'num-cell ':''}${c&&c.statusClass?c.statusClass:''}">${c&&typeof c==='object'?esc(c.text||''):esc(c==null?'':String(c))}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${headers.length}" style="text-align:center;padding:24px;color:#71877d">لا توجد بيانات خلال الفترة المحددة</td></tr>`}</tbody></table></div></section>`;
 }
 function tasksStructuredReport(data){
-  const rows=data.tasks.slice().sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||'')).map((t,i)=>[i+1,t.title||'',t.startDate||'',t.endDate||'',reportableNames(t.responsible).join('، '),{text:taskStatusLabel(t.status),statusClass:reportStatusClass(taskStatusLabel(t.status))},t.notes||'']);
+  const rows=data.tasks.slice().sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||'')).map((t,i)=>{const periodStatus=taskReportStatusLabel(t,data.period);return [i+1,t.title||'',t.startDate||'',t.endDate||'',reportableNames(t.responsible).join('، '),{text:periodStatus,statusClass:reportStatusClass(periodStatus)},t.notes||''];});
   return reportSheetHtml('جدول الأعمال',data.period.label,['م','الموضوع / المشروع','تاريخ البدء','تاريخ الانتهاء','المسؤول','الحالة','التحديات / الملاحظات'],rows);
 }
 function visitsStructuredReport(data){
@@ -3963,7 +3976,7 @@ async function exportReportToExcel(){
   try{
     const XLSX=await ensureXLSXLoaded(),data=reportPeriodData(),wb=XLSX.utils.book_new(),selected=selectedReportContentType(); wb.Workbook=wb.Workbook||{}; wb.Workbook.Views=[{RTL:true}];
     const add=(name,headers,rows,widths)=>{const aoa=[[`تقرير فريق التصوير - ${name}`],[`الفترة: ${data.period.label}`],[],headers,...rows];const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=widths.map(w=>({wch:w}));ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:Math.max(0,headers.length-1)}},{s:{r:1,c:0},e:{r:1,c:Math.max(0,headers.length-1)}}];styleExcelWorksheet(ws,XLSX,3);XLSX.utils.book_append_sheet(wb,ws,name.slice(0,28));};
-    if(selected==='all'||selected==='tasks') add('جدول الأعمال',['م','الموضوع / المشروع','تاريخ البدء','تاريخ الانتهاء','المسؤول','الحالة','التحديات / الملاحظات'],data.tasks.map((t,i)=>[i+1,t.title||'',t.startDate||'',t.endDate||'',reportableNames(t.responsible).join('، '),taskStatusLabel(t.status),t.notes||'']),[6,38,14,14,28,16,50]);
+    if(selected==='all'||selected==='tasks') add('جدول الأعمال',['م','الموضوع / المشروع','تاريخ البدء','تاريخ الانتهاء','المسؤول','الحالة','التحديات / الملاحظات'],data.tasks.map((t,i)=>[i+1,t.title||'',t.startDate||'',t.endDate||'',reportableNames(t.responsible).join('، '),taskReportStatusLabel(t,data.period),t.notes||'']),[6,38,14,14,28,16,50]);
     if(selected==='all'||selected==='visits'){const rows=[];let i=1;data.visits.forEach(v=>(v.sites||[{}]).forEach(site=>rows.push([i++,v.date||'',site.projectName||'',site.location||'',site.taskType||'',site.startTime||'',site.endTime||'',reportableNames(v.conductedBy).join('، '),site.description||''])));add('جدول الزيارات',['م','تاريخ الزيارة','اسم المشروع / الموقع','الموقع','نوع المهمة','وقت البداية','وقت الانتهاء','من قام بالزيارة','الوصف / الملاحظات'],rows,[6,14,34,20,20,12,12,28,48]);}
     if(selected==='all'||selected==='requests') add('طلبات التصوير',['م','رقم الطلب','الموضوع','التاريخ','الجهة','الموقع','الحالة','الأولوية','التصوير','المونتاج','الملاحظات'],data.requests.map((r,i)=>[i+1,r.requestNumber||'',r.event?.name||'',r.event?.date||'',r.requester?.directorate||'',r.event?.location||'',statusLabel(r.status),priorityLabel(r.priority),empNamesFromIds(r.internal?.assignedPhotographers).join('، '),empNamesFromIds(r.internal?.assignedEditors).join('، '),r.internal?.teamNotes||r.production?.notes||'']),[6,14,34,14,24,24,16,14,24,24,45]);
     if(selected==='all'||selected==='meetings') add('الاجتماعات',['م','عنوان الاجتماع','التاريخ','وقت البداية','وقت الانتهاء','المكان','الحضور','جدول الأعمال','الملاحظات / المحضر'],data.meetings.map((m,i)=>[i+1,m.title||'',m.date||'',m.startTime||'',m.endTime||'',m.location||'',empNamesFromIds(m.attendees).join('، '),m.agenda||'',m.notes||'']),[6,34,14,12,12,24,30,45,45]);
